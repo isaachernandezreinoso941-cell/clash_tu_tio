@@ -1,0 +1,5052 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Realm of Clans - Strategy 3D</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { overflow: hidden; background: #000; font-family: 'Segoe UI', Arial, sans-serif; user-select: none; }
+canvas { display: block; }
+
+/* Loading Screen */
+#loadingScreen {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: linear-gradient(135deg, #1a0a2e 0%, #2d1b69 30%, #1a0a2e 60%, #0d0521 100%);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    z-index: 10000; transition: opacity 1s;
+}
+#loadingScreen.hidden { opacity: 0; pointer-events: none; }
+.loading-title {
+    font-size: 56px; font-weight: 900; color: #ffd700;
+    text-shadow: 0 0 30px rgba(255,215,0,0.5), 0 4px 8px rgba(0,0,0,0.8);
+    letter-spacing: 4px; margin-bottom: 10px;
+    animation: titlePulse 2s ease-in-out infinite;
+}
+.loading-subtitle { font-size: 18px; color: #b8a9d4; margin-bottom: 40px; letter-spacing: 8px; }
+.loading-bar-bg {
+    width: 400px; height: 20px; background: rgba(0,0,0,0.5);
+    border-radius: 10px; border: 2px solid #ffd700; overflow: hidden;
+}
+.loading-bar-fill {
+    height: 100%; width: 0%; border-radius: 8px;
+    background: linear-gradient(90deg, #ffd700, #ff8c00, #ffd700);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s linear infinite;
+    transition: width 0.3s;
+}
+.loading-tip { color: #8a7ab5; font-size: 14px; margin-top: 20px; font-style: italic; }
+@keyframes titlePulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.03); } }
+@keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+/* HUD */
+#hud {
+    position: fixed; top: 0; left: 0; width: 100%; pointer-events: none; z-index: 100;
+}
+.resource-bar {
+    display: flex; gap: 8px; padding: 10px 15px;
+    background: linear-gradient(180deg, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.4) 100%);
+    pointer-events: auto;
+}
+.resource-item {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.15);
+    border-radius: 20px; padding: 5px 14px; font-size: 14px; font-weight: 700;
+}
+.resource-icon { width: 22px; height: 22px; border-radius: 50%; }
+.gold-icon { background: radial-gradient(circle, #ffd700, #b8860b); box-shadow: 0 0 8px rgba(255,215,0,0.5); }
+.elixir-icon { background: radial-gradient(circle, #e040fb, #7b1fa2); box-shadow: 0 0 8px rgba(224,64,251,0.5); }
+.dark-elixir-icon { background: radial-gradient(circle, #424242, #1a1a2e); box-shadow: 0 0 8px rgba(66,66,66,0.5); border: 1px solid #555; }
+.gems-icon { background: radial-gradient(circle, #4fc3f7, #0277bd); box-shadow: 0 0 8px rgba(79,195,247,0.5); }
+.trophy-icon { background: radial-gradient(circle, #ffd700, #ff6f00); box-shadow: 0 0 8px rgba(255,111,0,0.5); }
+.gold-text { color: #ffd700; }
+.elixir-text { color: #e040fb; }
+.dark-elixir-text { color: #9e9e9e; }
+.gems-text { color: #4fc3f7; }
+.trophy-text { color: #ffab00; }
+
+.level-badge {
+    background: linear-gradient(135deg, #ffd700, #ff8c00);
+    color: #1a0a2e; border-radius: 12px; padding: 4px 12px;
+    font-size: 13px; font-weight: 900;
+}
+.xp-text { color: #aaa; font-size: 11px; margin-left: 4px; }
+
+/* Bottom Bar */
+#bottomBar {
+    position: fixed; bottom: 0; left: 0; width: 100%;
+    display: flex; justify-content: center; gap: 6px;
+    padding: 8px 10px;
+    background: linear-gradient(0deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.5) 80%, transparent 100%);
+    z-index: 100;
+}
+.btn {
+    padding: 10px 18px; border: none; border-radius: 12px;
+    font-size: 13px; font-weight: 700; cursor: pointer;
+    transition: all 0.2s; text-transform: uppercase; letter-spacing: 1px;
+    pointer-events: auto; position: relative; overflow: hidden;
+}
+.btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.4); }
+.btn:active { transform: translateY(0); }
+.btn-build { background: linear-gradient(135deg, #4caf50, #2e7d32); color: white; }
+.btn-army { background: linear-gradient(135deg, #e040fb, #7b1fa2); color: white; }
+.btn-attack { background: linear-gradient(135deg, #f44336, #b71c1c); color: white; }
+.btn-shop { background: linear-gradient(135deg, #4fc3f7, #0277bd); color: white; }
+.btn-shield { background: linear-gradient(135deg, #ffd700, #ff8c00); color: #1a0a2e; }
+.btn-social { background: linear-gradient(135deg, #66bb6a, #388e3c); color: white; }
+
+/* Panels */
+.panel {
+    position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    background: linear-gradient(145deg, #1a1a3e 0%, #0d0d2b 100%);
+    border: 2px solid rgba(255,215,0,0.3); border-radius: 20px;
+    padding: 0; z-index: 200; display: none;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.8), inset 0 1px 0 rgba(255,255,255,0.1);
+    max-height: 85vh; overflow: hidden;
+}
+.panel.active { display: block; animation: panelIn 0.3s ease-out; }
+@keyframes panelIn { from { transform: translate(-50%, -50%) scale(0.8); opacity: 0; } to { transform: translate(-50%, -50%) scale(1); opacity: 1; } }
+.panel-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 24px; border-bottom: 1px solid rgba(255,215,0,0.2);
+    background: linear-gradient(90deg, rgba(255,215,0,0.1), transparent);
+}
+.panel-title { font-size: 22px; font-weight: 900; color: #ffd700; letter-spacing: 2px; }
+.panel-close {
+    width: 32px; height: 32px; border-radius: 50%; border: 2px solid #f44336;
+    background: rgba(244,67,54,0.2); color: #f44336; font-size: 18px;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: all 0.2s;
+}
+.panel-close:hover { background: #f44336; color: white; }
+.panel-body { padding: 20px 24px; overflow-y: auto; max-height: 65vh; }
+.panel-body::-webkit-scrollbar { width: 6px; }
+.panel-body::-webkit-scrollbar-thumb { background: rgba(255,215,0,0.3); border-radius: 3px; }
+
+/* Build Panel */
+#buildPanel { width: 700px; }
+.build-categories { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+.build-cat {
+    padding: 8px 16px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(255,255,255,0.05); color: #aaa; cursor: pointer;
+    font-size: 12px; font-weight: 700; text-transform: uppercase; transition: all 0.2s;
+}
+.build-cat.active, .build-cat:hover { background: rgba(255,215,0,0.2); color: #ffd700; border-color: #ffd700; }
+.build-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.build-item {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 14px; cursor: pointer; transition: all 0.2s;
+    text-align: center;
+}
+.build-item:hover { border-color: #ffd700; background: rgba(255,215,0,0.1); transform: translateY(-2px); }
+.build-item-icon { font-size: 36px; margin-bottom: 8px; }
+.build-item-name { color: #fff; font-size: 13px; font-weight: 700; margin-bottom: 4px; }
+.build-item-cost { font-size: 11px; font-weight: 600; }
+.build-item-desc { font-size: 10px; color: #888; margin-top: 4px; }
+
+/* Info Panel */
+#infoPanel { width: 420px; }
+.info-header-content { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+.info-icon-big { font-size: 54px; }
+.info-details h2 { color: #ffd700; font-size: 20px; margin-bottom: 4px; }
+.info-details .info-level { color: #aaa; font-size: 13px; }
+.info-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 16px; }
+.info-stat {
+    background: rgba(255,255,255,0.05); border-radius: 8px; padding: 10px;
+    text-align: center;
+}
+.info-stat-label { color: #888; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+.info-stat-value { color: #fff; font-size: 18px; font-weight: 700; margin-top: 2px; }
+.info-actions { display: flex; gap: 8px; }
+.info-btn {
+    flex: 1; padding: 12px; border: none; border-radius: 10px;
+    font-size: 13px; font-weight: 700; cursor: pointer; text-transform: uppercase;
+    transition: all 0.2s;
+}
+.info-btn-upgrade { background: linear-gradient(135deg, #ffd700, #ff8c00); color: #1a0a2e; }
+.info-btn-move { background: linear-gradient(135deg, #4caf50, #2e7d32); color: white; }
+.info-btn-sell { background: linear-gradient(135deg, #f44336, #b71c1c); color: white; }
+.info-btn:hover { transform: translateY(-2px); }
+
+/* Army Panel */
+#armyPanel { width: 650px; }
+.troop-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.troop-item {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 12px; padding: 12px; cursor: pointer; transition: all 0.2s;
+    text-align: center; position: relative;
+}
+.troop-item:hover { border-color: #e040fb; background: rgba(224,64,251,0.1); }
+.troop-item.selected { border-color: #e040fb; background: rgba(224,64,251,0.15); box-shadow: 0 0 15px rgba(224,64,251,0.3); }
+.troop-emoji { font-size: 32px; }
+.troop-name { color: #fff; font-size: 12px; font-weight: 700; margin: 4px 0; }
+.troop-stats { color: #aaa; font-size: 10px; }
+.troop-cost { color: #e040fb; font-size: 11px; font-weight: 600; }
+.troop-count {
+    position: absolute; top: 6px; right: 8px;
+    background: #e040fb; color: white; border-radius: 10px;
+    padding: 2px 8px; font-size: 11px; font-weight: 700;
+}
+.army-summary {
+    margin-top: 16px; padding: 14px; background: rgba(255,255,255,0.05);
+    border-radius: 12px; display: flex; justify-content: space-between; align-items: center;
+}
+.army-capacity { color: #fff; font-size: 14px; }
+.army-capacity span { color: #e040fb; font-weight: 700; }
+.train-btn {
+    padding: 10px 24px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, #e040fb, #7b1fa2);
+    color: white; font-size: 14px; font-weight: 700; cursor: pointer;
+    text-transform: uppercase; transition: all 0.2s;
+}
+.train-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(224,64,251,0.4); }
+
+/* Attack Panel */
+#attackPanel { width: 500px; }
+.attack-options { display: flex; flex-direction: column; gap: 12px; }
+.attack-option {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px; padding: 18px; cursor: pointer; transition: all 0.2s;
+    display: flex; align-items: center; gap: 16px;
+}
+.attack-option:hover { border-color: #f44336; background: rgba(244,67,54,0.1); transform: translateX(4px); }
+.attack-icon { font-size: 40px; }
+.attack-info h3 { color: #fff; font-size: 16px; margin-bottom: 4px; }
+.attack-info p { color: #888; font-size: 12px; }
+.attack-reward { color: #ffd700; font-size: 12px; font-weight: 600; margin-top: 4px; }
+
+/* Shop Panel */
+#shopPanel { width: 500px; }
+.shop-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.shop-item {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px; padding: 16px; cursor: pointer; transition: all 0.2s;
+    text-align: center;
+}
+.shop-item:hover { border-color: #4fc3f7; background: rgba(79,195,247,0.1); }
+.shop-emoji { font-size: 36px; margin-bottom: 8px; }
+.shop-name { color: #fff; font-size: 14px; font-weight: 700; }
+.shop-desc { color: #888; font-size: 11px; margin: 4px 0; }
+.shop-price { color: #4fc3f7; font-size: 13px; font-weight: 700; }
+
+/* Battle UI */
+#battleUI {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 150; display: none;
+}
+#battleUI.active { display: block; }
+.battle-top {
+    display: flex; justify-content: space-between; padding: 12px 20px;
+    background: linear-gradient(180deg, rgba(139,0,0,0.9) 0%, transparent 100%);
+    pointer-events: auto;
+}
+.battle-timer {
+    color: white; font-size: 28px; font-weight: 900;
+    text-shadow: 0 0 20px rgba(255,0,0,0.5);
+}
+.battle-stars { display: flex; gap: 8px; }
+.battle-star { font-size: 28px; opacity: 0.3; transition: all 0.5s; }
+.battle-star.earned { opacity: 1; transform: scale(1.3); }
+.battle-loot { color: #ffd700; font-size: 16px; font-weight: 700; }
+.battle-bottom {
+    position: absolute; bottom: 0; width: 100%;
+    display: flex; gap: 8px; padding: 10px;
+    background: linear-gradient(0deg, rgba(0,0,0,0.9) 0%, transparent 100%);
+    pointer-events: auto; justify-content: center;
+}
+.deploy-btn {
+    width: 65px; height: 65px; border-radius: 14px;
+    border: 2px solid rgba(255,255,255,0.2); background: rgba(0,0,0,0.6);
+    cursor: pointer; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; transition: all 0.2s;
+}
+.deploy-btn:hover { border-color: #ffd700; background: rgba(255,215,0,0.15); }
+.deploy-btn.selected { border-color: #ffd700; background: rgba(255,215,0,0.2); box-shadow: 0 0 15px rgba(255,215,0,0.4); }
+.deploy-btn .emoji { font-size: 24px; }
+.deploy-btn .count { color: #ffd700; font-size: 12px; font-weight: 700; }
+.end-battle-btn {
+    padding: 12px 24px; border: none; border-radius: 12px;
+    background: linear-gradient(135deg, #f44336, #b71c1c);
+    color: white; font-size: 14px; font-weight: 700; cursor: pointer;
+    text-transform: uppercase; align-self: center;
+}
+
+/* Battle Result */
+#battleResult {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85); z-index: 300; display: none;
+    flex-direction: column; align-items: center; justify-content: center;
+}
+#battleResult.active { display: flex; }
+.result-stars { font-size: 60px; margin-bottom: 20px; }
+.result-title { font-size: 42px; font-weight: 900; margin-bottom: 10px; }
+.result-victory { color: #ffd700; text-shadow: 0 0 30px rgba(255,215,0,0.5); }
+.result-defeat { color: #f44336; text-shadow: 0 0 30px rgba(244,67,54,0.5); }
+.result-loot {
+    display: flex; gap: 24px; margin: 20px 0;
+    background: rgba(255,255,255,0.05); padding: 16px 32px; border-radius: 16px;
+}
+.result-loot-item { text-align: center; }
+.result-loot-item .amount { font-size: 24px; font-weight: 700; }
+.result-loot-item .label { font-size: 12px; color: #888; }
+.result-ok {
+    padding: 14px 40px; border: none; border-radius: 12px;
+    background: linear-gradient(135deg, #ffd700, #ff8c00);
+    color: #1a0a2e; font-size: 16px; font-weight: 900; cursor: pointer;
+    margin-top: 20px; text-transform: uppercase;
+}
+
+/* Toast Notifications */
+.toast {
+    position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.9); border: 1px solid rgba(255,215,0,0.3);
+    border-radius: 12px; padding: 12px 24px; z-index: 500;
+    color: #fff; font-size: 14px; font-weight: 600;
+    animation: toastIn 0.3s ease-out, toastOut 0.3s 2.5s ease-in forwards;
+}
+@keyframes toastIn { from { transform: translateX(-50%) translateY(-20px); opacity: 0; } }
+@keyframes toastOut { to { transform: translateX(-50%) translateY(-20px); opacity: 0; } }
+
+/* Overlay */
+#overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); z-index: 190; display: none;
+}
+#overlay.active { display: block; }
+
+/* Day/Night indicator */
+#timeIndicator {
+    position: fixed; top: 58px; right: 15px; z-index: 100;
+    color: #aaa; font-size: 12px; pointer-events: none;
+}
+
+/* Placement ghost */
+.placement-info {
+    position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%);
+    background: rgba(0,0,0,0.9); border: 2px solid #4caf50;
+    border-radius: 14px; padding: 12px 24px; z-index: 100;
+    color: #fff; font-size: 14px; display: none;
+}
+.placement-info.active { display: flex; gap: 16px; align-items: center; }
+.placement-confirm {
+    padding: 8px 20px; border: none; border-radius: 8px;
+    background: #4caf50; color: white; font-weight: 700; cursor: pointer;
+}
+.placement-cancel {
+    padding: 8px 20px; border: none; border-radius: 8px;
+    background: #f44336; color: white; font-weight: 700; cursor: pointer;
+}
+
+/* Upgrade progress */
+.upgrade-bar {
+    width: 100%; height: 8px; background: rgba(255,255,255,0.1);
+    border-radius: 4px; overflow: hidden; margin-top: 8px;
+}
+.upgrade-fill {
+    height: 100%; background: linear-gradient(90deg, #ffd700, #ff8c00);
+    border-radius: 4px; transition: width 0.5s;
+}
+
+/* Spells Panel */
+#spellsPanel { width: 600px; }
+.spell-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.spell-item {
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1);
+    border-radius: 14px; padding: 14px; cursor: pointer; transition: all 0.2s;
+    text-align: center; position: relative;
+}
+.spell-item:hover { border-color: #7c4dff; background: rgba(124,77,255,0.15); }
+.spell-item.selected { border-color: #7c4dff; box-shadow: 0 0 15px rgba(124,77,255,0.4); }
+.spell-emoji { font-size: 36px; }
+.spell-name { color: #fff; font-size: 13px; font-weight: 700; margin: 6px 0 2px; }
+.spell-desc { color: #888; font-size: 10px; margin: 2px 0; }
+.spell-cost { color: #7c4dff; font-size: 12px; font-weight: 600; }
+.spell-count {
+    position: absolute; top: 6px; right: 8px;
+    background: #7c4dff; color: white; border-radius: 10px;
+    padding: 2px 8px; font-size: 11px; font-weight: 700;
+}
+.spell-summary {
+    margin-top: 14px; padding: 12px; background: rgba(255,255,255,0.05);
+    border-radius: 12px; display: flex; justify-content: space-between; align-items: center;
+}
+.brew-btn {
+    padding: 10px 24px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, #7c4dff, #4527a0);
+    color: white; font-size: 14px; font-weight: 700; cursor: pointer;
+    text-transform: uppercase;
+}
+
+/* Heroes Panel */
+#heroesPanel { width: 620px; }
+.hero-card {
+    background: linear-gradient(135deg, rgba(255,215,0,0.1), rgba(255,215,0,0.02));
+    border: 1px solid rgba(255,215,0,0.2); border-radius: 16px;
+    padding: 18px; margin-bottom: 12px; display: flex; gap: 16px;
+    align-items: center; cursor: pointer; transition: all 0.2s;
+}
+.hero-card:hover { border-color: #ffd700; transform: translateX(4px); }
+.hero-card.locked { opacity: 0.4; pointer-events: none; }
+.hero-emoji { font-size: 48px; }
+.hero-info { flex: 1; }
+.hero-info h3 { color: #ffd700; font-size: 16px; margin-bottom: 2px; }
+.hero-info .hero-level { color: #aaa; font-size: 12px; }
+.hero-info .hero-stats { color: #ccc; font-size: 11px; margin-top: 4px; }
+.hero-ability { color: #4fc3f7; font-size: 11px; font-style: italic; margin-top: 2px; }
+.hero-btn {
+    padding: 8px 16px; border: none; border-radius: 8px;
+    font-size: 12px; font-weight: 700; cursor: pointer; text-transform: uppercase;
+}
+.hero-btn-summon { background: linear-gradient(135deg, #ffd700, #ff8c00); color: #1a0a2e; }
+.hero-btn-upgrade { background: linear-gradient(135deg, #4caf50, #2e7d32); color: white; }
+
+/* Clan Panel */
+#clanPanel { width: 550px; }
+.clan-header-info {
+    display: flex; align-items: center; gap: 16px; margin-bottom: 16px;
+    padding: 14px; background: rgba(255,255,255,0.05); border-radius: 12px;
+}
+.clan-badge { font-size: 48px; }
+.clan-details h2 { color: #ffd700; font-size: 18px; }
+.clan-details p { color: #aaa; font-size: 12px; }
+.clan-members { margin-top: 12px; }
+.clan-member {
+    display: flex; align-items: center; gap: 10px; padding: 8px;
+    border-bottom: 1px solid rgba(255,255,255,0.05);
+}
+.clan-member-rank { color: #ffd700; font-size: 12px; width: 20px; }
+.clan-member-name { color: #fff; font-size: 13px; flex: 1; }
+.clan-member-trophies { color: #ffab00; font-size: 12px; }
+.clan-chat {
+    margin-top: 12px; background: rgba(0,0,0,0.3); border-radius: 10px;
+    padding: 10px; max-height: 150px; overflow-y: auto;
+}
+.chat-msg { margin-bottom: 6px; font-size: 12px; }
+.chat-msg .sender { color: #4fc3f7; font-weight: 600; }
+.chat-msg .text { color: #ccc; }
+.chat-input-row { display: flex; gap: 8px; margin-top: 8px; }
+.chat-input {
+    flex: 1; padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.4); color: white; font-size: 12px; outline: none;
+}
+.chat-send {
+    padding: 8px 16px; border: none; border-radius: 8px;
+    background: #4caf50; color: white; font-weight: 700; cursor: pointer; font-size: 12px;
+}
+
+/* Achievements Panel */
+#achievePanel { width: 550px; }
+.achieve-item {
+    display: flex; align-items: center; gap: 12px; padding: 12px;
+    background: rgba(255,255,255,0.03); border-radius: 10px; margin-bottom: 8px;
+    border: 1px solid rgba(255,255,255,0.05); transition: all 0.2s;
+}
+.achieve-item.unlocked { border-color: rgba(255,215,0,0.3); background: rgba(255,215,0,0.05); }
+.achieve-icon { font-size: 28px; }
+.achieve-info { flex: 1; }
+.achieve-info h4 { color: #fff; font-size: 13px; margin-bottom: 2px; }
+.achieve-info p { color: #888; font-size: 11px; }
+.achieve-reward { color: #ffd700; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.achieve-progress {
+    width: 100%; height: 6px; background: rgba(255,255,255,0.1);
+    border-radius: 3px; margin-top: 4px; overflow: hidden;
+}
+.achieve-progress-fill {
+    height: 100%; background: linear-gradient(90deg, #ffd700, #ff8c00);
+    border-radius: 3px; transition: width 0.5s;
+}
+.achieve-check { color: #4caf50; font-size: 20px; }
+
+/* League Badge */
+#leagueBadge {
+    position: fixed; top: 58px; left: 15px; z-index: 100;
+    display: flex; align-items: center; gap: 6px; cursor: pointer;
+    background: rgba(0,0,0,0.6); border-radius: 20px; padding: 4px 12px 4px 6px;
+    border: 1px solid rgba(255,255,255,0.1);
+}
+.league-icon { font-size: 20px; }
+.league-name { color: #fff; font-size: 11px; font-weight: 600; }
+
+/* Tutorial */
+#tutorial {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    z-index: 10000; display: none; pointer-events: auto;
+}
+#tutorial.active { display: block; }
+.tutorial-overlay {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.7);
+}
+.tutorial-box {
+    position: absolute; bottom: 80px; left: 50%; transform: translateX(-50%);
+    background: linear-gradient(145deg, #1a1a3e, #0d0d2b);
+    border: 2px solid #ffd700; border-radius: 16px; padding: 20px 28px;
+    max-width: 450px; text-align: center;
+    animation: tutorialPop 0.4s ease-out;
+}
+@keyframes tutorialPop { from { transform: translateX(-50%) scale(0.7); opacity: 0; } }
+.tutorial-text { color: #fff; font-size: 15px; line-height: 1.5; margin-bottom: 14px; }
+.tutorial-btn {
+    padding: 10px 30px; border: none; border-radius: 10px;
+    background: linear-gradient(135deg, #ffd700, #ff8c00);
+    color: #1a0a2e; font-size: 14px; font-weight: 900; cursor: pointer;
+    text-transform: uppercase;
+}
+.tutorial-step { color: #888; font-size: 11px; margin-top: 8px; }
+.tutorial-arrow {
+    position: absolute; width: 0; height: 0;
+    border-left: 15px solid transparent; border-right: 15px solid transparent;
+    border-bottom: 20px solid #ffd700;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .build-grid { grid-template-columns: repeat(2, 1fr); }
+    .troop-grid { grid-template-columns: repeat(3, 1fr); }
+    .spell-grid { grid-template-columns: repeat(2, 1fr); }
+    #buildPanel, #armyPanel, #spellsPanel, #heroesPanel { width: 95vw; }
+    .btn { padding: 8px 12px; font-size: 11px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Loading Screen -->
+<div id="loadingScreen">
+    <div class="loading-title">REALM OF CLANS</div>
+    <div class="loading-subtitle">STRATEGY</div>
+    <div class="loading-bar-bg"><div class="loading-bar-fill" id="loadBar"></div></div>
+    <div class="loading-tip" id="loadTip">Construyendo tu aldea...</div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+    <div class="resource-bar">
+        <div class="resource-item">
+            <div class="resource-icon gold-icon"></div>
+            <span class="gold-text" id="goldDisplay">5000</span>
+        </div>
+        <div class="resource-item">
+            <div class="resource-icon elixir-icon"></div>
+            <span class="elixir-text" id="elixirDisplay">5000</span>
+        </div>
+        <div class="resource-item">
+            <div class="resource-icon dark-elixir-icon"></div>
+            <span class="dark-elixir-text" id="darkElixirDisplay">0</span>
+        </div>
+        <div class="resource-item">
+            <div class="resource-icon gems-icon"></div>
+            <span class="gems-text" id="gemsDisplay">250</span>
+        </div>
+        <div class="resource-item">
+            <div class="resource-icon trophy-icon"></div>
+            <span class="trophy-text" id="trophyDisplay">0</span>
+        </div>
+        <div class="resource-item">
+            <div class="level-badge" id="levelBadge">Nv 1</div>
+            <span class="xp-text" id="xpDisplay">0/100 XP</span>
+        </div>
+    </div>
+</div>
+
+<!-- Bottom Bar -->
+<div id="bottomBar">
+    <button class="btn btn-build" onclick="openPanel('build')">🏗️ Construir</button>
+    <button class="btn btn-army" onclick="openPanel('army')">⚔️ Ejército</button>
+    <button class="btn" style="background:linear-gradient(135deg,#7c4dff,#4527a0);color:white" onclick="openPanel('spells')">✨ Hechizos</button>
+    <button class="btn" style="background:linear-gradient(135deg,#ffd700,#ff8c00);color:#1a0a2e" onclick="openPanel('heroes')">👑 Héroes</button>
+    <button class="btn btn-attack" onclick="openPanel('attack')">💥 Atacar</button>
+    <button class="btn btn-shop" onclick="openPanel('shop')">💎 Tienda</button>
+    <button class="btn" style="background:linear-gradient(135deg,#2196f3,#0d47a1);color:white" onclick="openPanel('clan')">🏰 Clan</button>
+    <button class="btn" style="background:linear-gradient(135deg,#ff9800,#e65100);color:white" onclick="openPanel('achieve')">🏆 Logros</button>
+    <button class="btn btn-social" onclick="saveGame()">💾 Guardar</button>
+</div>
+
+<!-- Time Indicator -->
+<div id="timeIndicator">☀️ Día</div>
+
+<!-- Placement Info -->
+<div class="placement-info" id="placementInfo">
+    <span id="placementText">Coloca el edificio</span>
+    <button class="placement-confirm" onclick="confirmPlacement()">✓ Colocar</button>
+    <button class="placement-cancel" onclick="cancelPlacement()">✗ Cancelar</button>
+</div>
+
+<!-- Overlay -->
+<div id="overlay" onclick="closeAllPanels()"></div>
+
+<!-- Build Panel -->
+<div class="panel" id="buildPanel">
+    <div class="panel-header">
+        <span class="panel-title">🏗️ CONSTRUIR</span>
+        <div class="panel-close" onclick="closeAllPanels()">✕</div>
+    </div>
+    <div class="panel-body">
+        <div class="build-categories">
+            <div class="build-cat active" onclick="selectBuildCat('defense', this)">🛡️ Defensa</div>
+            <div class="build-cat" onclick="selectBuildCat('resource', this)">💰 Recursos</div>
+            <div class="build-cat" onclick="selectBuildCat('army', this)">⚔️ Ejército</div>
+            <div class="build-cat" onclick="selectBuildCat('walls', this)">🧱 Muros</div>
+            <div class="build-cat" onclick="selectBuildCat('traps', this)">💣 Trampas</div>
+            <div class="build-cat" onclick="selectBuildCat('deco', this)">🌳 Decoración</div>
+        </div>
+        <div class="build-grid" id="buildGrid"></div>
+    </div>
+</div>
+
+<!-- Info Panel -->
+<div class="panel" id="infoPanel">
+    <div class="panel-header">
+        <span class="panel-title">📋 INFO</span>
+        <div class="panel-close" onclick="closeAllPanels()">✕</div>
+    </div>
+    <div class="panel-body" id="infoPanelBody"></div>
+</div>
+
+<!-- Army Panel -->
+<div class="panel" id="armyPanel">
+    <div class="panel-header">
+        <span class="panel-title">⚔️ EJÉRCITO</span>
+        <div class="panel-close" onclick="closeAllPanels()">✕</div>
+    </div>
+    <div class="panel-body">
+        <div class="troop-grid" id="troopGrid"></div>
+        <div class="army-summary">
+            <div class="army-capacity">Capacidad: <span id="armyCount">0</span>/<span id="armyCap">20</span></div>
+            <button class="train-btn" onclick="trainSelected()">Entrenar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Attack Panel -->
+<div class="panel" id="attackPanel">
+    <div class="panel-header">
+        <span class="panel-title">💥 ATACAR</span>
+        <div class="panel-close" onclick="closeAllPanels()">✕</div>
+    </div>
+    <div class="panel-body">
+        <div class="attack-options">
+            <div class="attack-option" onclick="startBattle('goblin')">
+                <div class="attack-icon">👺</div>
+                <div class="attack-info">
+                    <h3>Campaña Goblin</h3>
+                    <p>Ataca bases goblins y gana recursos</p>
+                    <div class="attack-reward">🏆 +5 trofeos | 💰 500-2000 oro</div>
+                </div>
+            </div>
+            <div class="attack-option" onclick="startBattle('rival')">
+                <div class="attack-icon">⚔️</div>
+                <div class="attack-info">
+                    <h3>Batalla Multijugador</h3>
+                    <p>Busca un rival y saquea su aldea</p>
+                    <div class="attack-reward">🏆 +10-30 trofeos | 💰 Saqueo variable</div>
+                </div>
+            </div>
+            <div class="attack-option" onclick="startBattle('war')">
+                <div class="attack-icon">🏰</div>
+                <div class="attack-info">
+                    <h3>Guerra de Clanes</h3>
+                    <p>Batalla épica contra otro clan</p>
+                    <div class="attack-reward">🏆 +50 trofeos | 💰 Botín de guerra</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Shop Panel -->
+<div class="panel" id="shopPanel">
+    <div class="panel-header">
+        <span class="panel-title">💎 TIENDA</span>
+        <div class="panel-close" onclick="closeAllPanels()">✕</div>
+    </div>
+    <div class="panel-body">
+        <div class="shop-grid">
+            <div class="shop-item" onclick="buyShop('gold1')">
+                <div class="shop-emoji">💰</div>
+                <div class="shop-name">Saco de Oro</div>
+                <div class="shop-desc">+5,000 Oro</div>
+                <div class="shop-price">💎 50 Gemas</div>
+            </div>
+            <div class="shop-item" onclick="buyShop('elixir1')">
+                <div class="shop-emoji">🧪</div>
+                <div class="shop-name">Frasco de Elixir</div>
+                <div class="shop-desc">+5,000 Elixir</div>
+                <div class="shop-price">💎 50 Gemas</div>
+            </div>
+            <div class="shop-item" onclick="buyShop('gold2')">
+                <div class="shop-emoji">👑</div>
+                <div class="shop-name">Cofre Real</div>
+                <div class="shop-desc">+25,000 Oro</div>
+                <div class="shop-price">💎 200 Gemas</div>
+            </div>
+            <div class="shop-item" onclick="buyShop('elixir2')">
+                <div class="shop-emoji">⚗️</div>
+                <div class="shop-name">Caldero de Elixir</div>
+                <div class="shop-desc">+25,000 Elixir</div>
+                <div class="shop-price">💎 200 Gemas</div>
+            </div>
+            <div class="shop-item" onclick="buyShop('shield')">
+                <div class="shop-emoji">🛡️</div>
+                <div class="shop-name">Escudo 12h</div>
+                <div class="shop-desc">Protección 12 horas</div>
+                <div class="shop-price">💎 100 Gemas</div>
+            </div>
+            <div class="shop-item" onclick="buyShop('builder')">
+                <div class="shop-emoji">👷</div>
+                <div class="shop-name">Constructor Extra</div>
+                <div class="shop-desc">+1 constructor</div>
+                <div class="shop-price">💎 500 Gemas</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Spells Panel -->
+<div class="panel" id="spellsPanel">
+    <div class="panel-header">
+        <span class="panel-title">✨ HECHIZOS</span>
+        <div class="panel-close" onclick="closeAllPanels()">✕</div>
+    </div>
+    <div class="panel-body">
+        <div class="spell-grid" id="spellGrid"></div>
+        <div class="spell-summary">
+            <div style="color:#fff;font-size:14px">Hechizos: <span style="color:#7c4dff;font-weight:700" id="spellCount">0</span>/<span id="spellCap">5</span></div>
+            <button class="brew-btn" onclick="brewSelected()">Preparar</button>
+        </div>
+    </div>
+</div>
+
+<!-- Heroes Panel -->
+<div class="panel" id="heroesPanel">
+    <div class="panel-header">
+        <span class="panel-title">👑 HÉROES</span>
+        <div class="panel-close" onclick="closeAllPanels()">✕</div>
+    </div>
+    <div class="panel-body" id="heroesPanelBody"></div>
+</div>
+
+<!-- Clan Panel -->
+<div class="panel" id="clanPanel">
+    <div class="panel-header">
+        <span class="panel-title">🏰 CLAN</span>
+        <div class="panel-close" onclick="closeAllPanels()">✕</div>
+    </div>
+    <div class="panel-body" id="clanPanelBody"></div>
+</div>
+
+<!-- Achievements Panel -->
+<div class="panel" id="achievePanel">
+    <div class="panel-header">
+        <span class="panel-title">🏆 LOGROS</span>
+        <div class="panel-close" onclick="closeAllPanels()">✕</div>
+    </div>
+    <div class="panel-body" id="achievePanelBody"></div>
+</div>
+
+<!-- League Badge -->
+<div id="leagueBadge" onclick="showLeagueInfo()">
+    <span class="league-icon" id="leagueIcon">🥉</span>
+    <span class="league-name" id="leagueName">Bronce III</span>
+</div>
+
+<!-- Tutorial -->
+<div id="tutorial">
+    <div class="tutorial-overlay"></div>
+    <div class="tutorial-box">
+        <div class="tutorial-text" id="tutorialText"></div>
+        <button class="tutorial-btn" id="tutorialBtn" onclick="nextTutorialStep()">Siguiente</button>
+        <div class="tutorial-step" id="tutorialStep"></div>
+    </div>
+</div>
+
+<!-- Battle UI -->
+<div id="battleUI">
+    <div class="battle-top">
+        <div>
+            <div class="battle-timer" id="battleTimer">3:00</div>
+            <div class="battle-loot">💰 <span id="battleGoldLoot">0</span> | 🧪 <span id="battleElixirLoot">0</span></div>
+        </div>
+        <div class="battle-stars">
+            <div class="battle-star" id="star1">⭐</div>
+            <div class="battle-star" id="star2">⭐</div>
+            <div class="battle-star" id="star3">⭐</div>
+        </div>
+        <button class="end-battle-btn" onclick="endBattle()">Rendirse</button>
+    </div>
+    <div class="battle-bottom" id="deployBar"></div>
+</div>
+
+<!-- Battle Result -->
+<div id="battleResult">
+    <div class="result-stars" id="resultStars"></div>
+    <div class="result-title" id="resultTitle"></div>
+    <div class="result-loot" id="resultLoot"></div>
+    <button class="result-ok" onclick="closeBattleResult()">Continuar</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ============================================
+// REALM OF CLANS - Full 3D Strategy Game
+// ============================================
+
+// --- GAME STATE ---
+const GameState = {
+    gold: 5000,
+    elixir: 5000,
+    darkElixir: 0,
+    gems: 250,
+    trophies: 0,
+    level: 1,
+    xp: 0,
+    xpNeeded: 100,
+    townHallLevel: 1,
+    builders: 2,
+    buildersUsed: 0,
+    shieldTime: 0,
+    army: {},
+    armyCap: 20,
+    buildings: [],
+    troops: [],
+    battleActive: false,
+    battleTime: 180,
+    battleStars: 0,
+    battleLootGold: 0,
+    battleLootElixir: 0,
+    selectedTroop: null,
+    placingBuilding: null,
+    placementGhost: null,
+    selectedBuilding: null,
+    dayTime: 0,
+    totalTime: 0,
+    productionTimer: 0
+};
+
+// --- BUILDING DEFINITIONS ---
+const BUILDINGS = {
+    // Defense
+    cannon: { name: 'Cañón', icon: '💣', cat: 'defense', cost: 500, costType: 'gold', hp: 400, dps: 10, range: 8, size: 2, maxLevel: 15, color: 0x8B4513, desc: 'Dispara bolas de cañón' },
+    archerTower: { name: 'Torre de Arqueras', icon: '🏹', cat: 'defense', cost: 800, costType: 'gold', hp: 500, dps: 12, range: 10, size: 2, maxLevel: 15, color: 0x654321, desc: 'Ataca aire y tierra' },
+    mortar: { name: 'Mortero', icon: '💥', cat: 'defense', cost: 2000, costType: 'gold', hp: 600, dps: 8, range: 12, size: 2, maxLevel: 10, color: 0x555555, desc: 'Daño de área devastador' },
+    airDefense: { name: 'Defensa Aérea', icon: '🚀', cat: 'defense', cost: 3000, costType: 'gold', hp: 800, dps: 20, range: 10, size: 2, maxLevel: 10, color: 0xcc0000, desc: 'Solo ataca unidades aéreas' },
+    wizardTower: { name: 'Torre de Magos', icon: '🔮', cat: 'defense', cost: 5000, costType: 'gold', hp: 700, dps: 15, range: 7, size: 2, maxLevel: 10, color: 0x6a0dad, desc: 'Daño de área mágico' },
+    xbow: { name: 'Ballesta X', icon: '🎯', cat: 'defense', cost: 15000, costType: 'gold', hp: 1500, dps: 30, range: 14, size: 2, maxLevel: 5, color: 0x333333, desc: 'Alcance extremo' },
+    infernoTower: { name: 'Torre Infernal', icon: '🔥', cat: 'defense', cost: 25000, costType: 'gold', hp: 2000, dps: 40, range: 9, size: 2, maxLevel: 5, color: 0xff4400, desc: 'Daño creciente con el tiempo' },
+    // Resources
+    goldMine: { name: 'Mina de Oro', icon: '⛏️', cat: 'resource', cost: 300, costType: 'elixir', hp: 500, production: 200, prodType: 'gold', size: 2, maxLevel: 15, color: 0xDAA520, desc: 'Produce oro' },
+    elixirCollector: { name: 'Recolector de Elixir', icon: '🧪', cat: 'resource', cost: 300, costType: 'gold', hp: 500, production: 200, prodType: 'elixir', size: 2, maxLevel: 15, color: 0x9C27B0, desc: 'Produce elixir' },
+    goldStorage: { name: 'Almacén de Oro', icon: '🏦', cat: 'resource', cost: 500, costType: 'elixir', hp: 1000, capacity: 50000, size: 2, maxLevel: 12, color: 0xFFD700, desc: 'Almacena oro' },
+    elixirStorage: { name: 'Almacén de Elixir', icon: '🏺', cat: 'resource', cost: 500, costType: 'gold', hp: 1000, capacity: 50000, size: 2, maxLevel: 12, color: 0xCE93D8, desc: 'Almacena elixir' },
+    darkDrill: { name: 'Perforadora de Elixir Oscuro', icon: '🛢️', cat: 'resource', cost: 5000, costType: 'elixir', hp: 800, production: 20, prodType: 'darkElixir', size: 2, maxLevel: 8, color: 0x1a1a2e, desc: 'Produce elixir oscuro' },
+    // Army
+    armyCamp: { name: 'Campamento', icon: '⛺', cat: 'army', cost: 500, costType: 'elixir', hp: 300, capacity: 10, size: 3, maxLevel: 10, color: 0x8B7355, desc: '+10 capacidad de tropas' },
+    barracks: { name: 'Cuartel', icon: '🏚️', cat: 'army', cost: 800, costType: 'elixir', hp: 400, size: 2, maxLevel: 12, color: 0x795548, desc: 'Entrena tropas básicas' },
+    darkBarracks: { name: 'Cuartel Oscuro', icon: '🏴', cat: 'army', cost: 5000, costType: 'elixir', hp: 600, size: 2, maxLevel: 8, color: 0x2c003e, desc: 'Entrena tropas oscuras' },
+    lab: { name: 'Laboratorio', icon: '🔬', cat: 'army', cost: 3000, costType: 'elixir', hp: 500, size: 3, maxLevel: 10, color: 0x0288D1, desc: 'Mejora tus tropas' },
+    spellFactory: { name: 'Fábrica de Hechizos', icon: '✨', cat: 'army', cost: 5000, costType: 'elixir', hp: 400, size: 2, maxLevel: 5, color: 0x7E57C2, desc: 'Crea hechizos' },
+    heroAltar: { name: 'Altar de Héroe', icon: '👑', cat: 'army', cost: 10000, costType: 'darkElixir', hp: 1000, size: 2, maxLevel: 1, color: 0xFFD700, desc: 'Invoca al Rey Bárbaro' },
+    // Walls
+    wall: { name: 'Muro', icon: '🧱', cat: 'walls', cost: 100, costType: 'gold', hp: 300, size: 1, maxLevel: 14, color: 0x8B8682, desc: 'Protege tu base' },
+    // Traps
+    bomb: { name: 'Bomba', icon: '💣', cat: 'traps', cost: 200, costType: 'gold', hp: 1, dps: 50, range: 2, size: 1, maxLevel: 8, color: 0x333333, desc: 'Explota al contacto', hidden: true },
+    springTrap: { name: 'Trampa de Resorte', icon: '🦘', cat: 'traps', cost: 400, costType: 'gold', hp: 1, size: 1, maxLevel: 5, color: 0x4CAF50, desc: 'Lanza tropas al aire', hidden: true },
+    airBomb: { name: 'Bomba Aérea', icon: '🎈', cat: 'traps', cost: 600, costType: 'gold', hp: 1, dps: 80, range: 3, size: 1, maxLevel: 6, color: 0xff6666, desc: 'Explota unidades aéreas', hidden: true },
+    // Decoration
+    tree: { name: 'Árbol', icon: '🌳', cat: 'deco', cost: 50, costType: 'gold', hp: 100, size: 1, maxLevel: 1, color: 0x228B22, desc: 'Decoración natural' },
+    flag: { name: 'Bandera', icon: '🚩', cat: 'deco', cost: 100, costType: 'gold', hp: 100, size: 1, maxLevel: 1, color: 0xff0000, desc: 'Marca tu territorio' },
+    torch: { name: 'Antorcha', icon: '🔥', cat: 'deco', cost: 200, costType: 'gold', hp: 100, size: 1, maxLevel: 1, color: 0xff6600, desc: 'Ilumina la noche' },
+    statue: { name: 'Estatua', icon: '🗿', cat: 'deco', cost: 500, costType: 'gold', hp: 200, size: 1, maxLevel: 1, color: 0x808080, desc: 'Estatua épica' },
+    fountain: { name: 'Fuente', icon: '⛲', cat: 'deco', cost: 1000, costType: 'elixir', hp: 200, size: 2, maxLevel: 1, color: 0x4fc3f7, desc: 'Fuente decorativa' }
+};
+
+// --- TROOP DEFINITIONS ---
+const TROOPS = {
+    barbarian: { name: 'Bárbaro', icon: '🗡️', hp: 45, dps: 8, speed: 1.2, cost: 25, costType: 'elixir', space: 1, type: 'ground', color: 0xFFD54F, desc: 'Guerrero cuerpo a cuerpo' },
+    archer: { name: 'Arquera', icon: '🏹', hp: 25, dps: 7, speed: 1, cost: 50, costType: 'elixir', space: 1, type: 'ground', color: 0xE91E63, range: 4, desc: 'Ataque a distancia' },
+    giant: { name: 'Gigante', icon: '🦍', hp: 300, dps: 11, speed: 0.6, cost: 250, costType: 'elixir', space: 5, type: 'ground', color: 0xFF8F00, desc: 'Tanque con mucha vida' },
+    goblin: { name: 'Goblin', icon: '👺', hp: 25, dps: 11, speed: 2, cost: 30, costType: 'elixir', space: 1, type: 'ground', color: 0x4CAF50, desc: 'Rápido, busca recursos' },
+    wallBreaker: { name: 'Rompemuro', icon: '💀', hp: 20, dps: 46, speed: 1.5, cost: 100, costType: 'elixir', space: 2, type: 'ground', color: 0xBDBDBD, desc: 'Destruye muros' },
+    balloon: { name: 'Globo', icon: '🎈', hp: 150, dps: 25, speed: 0.5, cost: 200, costType: 'elixir', space: 5, type: 'air', color: 0x212121, desc: 'Bombardero aéreo' },
+    wizard: { name: 'Mago', icon: '🧙', hp: 75, dps: 50, speed: 0.8, cost: 500, costType: 'elixir', space: 4, type: 'ground', color: 0x7E57C2, range: 3, desc: 'Daño mágico de área' },
+    healer: { name: 'Sanadora', icon: '💚', hp: 60, dps: 0, speed: 0.6, cost: 400, costType: 'elixir', space: 8, type: 'air', color: 0xFFEB3B, heal: 20, desc: 'Cura tropas terrestres' },
+    dragon: { name: 'Dragón', icon: '🐉', hp: 210, dps: 75, speed: 0.8, cost: 1000, costType: 'elixir', space: 10, type: 'air', color: 0xF44336, range: 3, desc: 'Aliento de fuego devastador' },
+    pekka: { name: 'P.E.K.K.A', icon: '🤖', hp: 500, dps: 100, speed: 0.5, cost: 1500, costType: 'elixir', space: 12, type: 'ground', color: 0x3F51B5, desc: 'Robot de combate supremo' },
+    minion: { name: 'Esbirro', icon: '👿', hp: 40, dps: 18, speed: 1.5, cost: 6, costType: 'darkElixir', space: 2, type: 'air', color: 0x311B92, desc: 'Tropa aérea oscura' },
+    hogRider: { name: 'Montapuercos', icon: '🐗', hp: 270, dps: 62, speed: 1.4, cost: 20, costType: 'darkElixir', space: 5, type: 'ground', color: 0x5D4037, desc: 'Salta muros' }
+};
+
+// --- THREE.JS SETUP ---
+let scene, camera, renderer, clock;
+let ground, gridHelper;
+let raycaster, mouse;
+let buildingMeshes = [];
+let troopMeshes = [];
+let projectiles = [];
+let particles = [];
+let enemyBuildings = [];
+let enemyTroops = [];
+let ambientLight, dirLight, pointLights = [];
+let clouds = [];
+let waterTiles = [];
+let gridSize = 40;
+let cellSize = 2;
+let cameraTarget = { x: 0, y: 0, z: 0 };
+let cameraAngle = Math.PI / 4;
+let cameraDist = 50;
+let cameraHeight = 40;
+let isDragging = false;
+let lastMouse = { x: 0, y: 0 };
+let pinchDist = 0;
+
+function init() {
+    // Scene
+    scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x87CEEB, 0.003);
+
+    // Camera
+    camera = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 500);
+    updateCamera();
+
+    // Renderer
+    renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.2;
+    document.body.insertBefore(renderer.domElement, document.body.firstChild);
+
+    clock = new THREE.Clock();
+    raycaster = new THREE.Raycaster();
+    mouse = new THREE.Vector2();
+
+    // Lights
+    ambientLight = new THREE.AmbientLight(0x6688aa, 0.5);
+    scene.add(ambientLight);
+
+    dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
+    dirLight.position.set(30, 50, 30);
+    dirLight.castShadow = true;
+    dirLight.shadow.mapSize.width = 2048;
+    dirLight.shadow.mapSize.height = 2048;
+    dirLight.shadow.camera.near = 1;
+    dirLight.shadow.camera.far = 150;
+    dirLight.shadow.camera.left = -60;
+    dirLight.shadow.camera.right = 60;
+    dirLight.shadow.camera.top = 60;
+    dirLight.shadow.camera.bottom = -60;
+    dirLight.shadow.bias = -0.001;
+    scene.add(dirLight);
+
+    const hemiLight = new THREE.HemisphereLight(0x87CEEB, 0x3a5f0b, 0.4);
+    scene.add(hemiLight);
+
+    // Skybox
+    createSkybox();
+
+    // Ground
+    createGround();
+
+    // Water
+    createWater();
+
+    // Clouds
+    createClouds();
+
+    // Grid
+    createGrid();
+
+    // Environment
+    createEnvironment();
+
+    // Place initial Town Hall
+    placeInitialBuildings();
+
+    // Events
+    setupEvents();
+
+    // Load saved game
+    loadGame();
+
+    // Start loop
+    animate();
+}
+
+function createSkybox() {
+    const skyGeo = new THREE.SphereGeometry(200, 32, 32);
+    const skyMat = new THREE.ShaderMaterial({
+        uniforms: {
+            topColor: { value: new THREE.Color(0x0077ff) },
+            bottomColor: { value: new THREE.Color(0x89CFF0) },
+            offset: { value: 20 },
+            exponent: { value: 0.6 }
+        },
+        vertexShader: `
+            varying vec3 vWorldPosition;
+            void main() {
+                vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+                vWorldPosition = worldPosition.xyz;
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+            }
+        `,
+        fragmentShader: `
+            uniform vec3 topColor;
+            uniform vec3 bottomColor;
+            uniform float offset;
+            uniform float exponent;
+            varying vec3 vWorldPosition;
+            void main() {
+                float h = normalize(vWorldPosition + offset).y;
+                gl_FragColor = vec4(mix(bottomColor, topColor, max(pow(max(h, 0.0), exponent), 0.0)), 1.0);
+            }
+        `,
+        side: THREE.BackSide
+    });
+    scene.add(new THREE.Mesh(skyGeo, skyMat));
+}
+
+function createGround() {
+    // Main island
+    const groundGeo = new THREE.CylinderGeometry(50, 48, 3, 64);
+    const groundMat = new THREE.MeshStandardMaterial({
+        color: 0x4a7a2e,
+        roughness: 0.9,
+        metalness: 0.0,
+        flatShading: false
+    });
+    ground = new THREE.Mesh(groundGeo, groundMat);
+    ground.position.y = -1.5;
+    ground.receiveShadow = true;
+    scene.add(ground);
+
+    // Grass detail layer
+    const grassGeo = new THREE.PlaneGeometry(100, 100);
+    const grassMat = new THREE.MeshStandardMaterial({
+        color: 0x5a8a3e,
+        roughness: 1,
+        transparent: true,
+        opacity: 0.6
+    });
+    const grass = new THREE.Mesh(grassGeo, grassMat);
+    grass.rotation.x = -Math.PI / 2;
+    grass.position.y = 0.02;
+    grass.receiveShadow = true;
+    scene.add(grass);
+
+    // Dirt edges
+    const dirtGeo = new THREE.CylinderGeometry(48, 45, 4, 64);
+    const dirtMat = new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 1 });
+    const dirt = new THREE.Mesh(dirtGeo, dirtMat);
+    dirt.position.y = -4;
+    scene.add(dirt);
+
+    // Rock base
+    const rockGeo = new THREE.CylinderGeometry(45, 40, 6, 32);
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x696969, roughness: 0.8 });
+    const rock = new THREE.Mesh(rockGeo, rockMat);
+    rock.position.y = -8;
+    scene.add(rock);
+}
+
+function createWater() {
+    const waterGeo = new THREE.PlaneGeometry(500, 500);
+    const waterMat = new THREE.MeshStandardMaterial({
+        color: 0x006994,
+        transparent: true,
+        opacity: 0.7,
+        roughness: 0.1,
+        metalness: 0.3
+    });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = -6;
+    scene.add(water);
+    waterTiles.push(water);
+}
+
+function createClouds() {
+    for (let i = 0; i < 15; i++) {
+        const cloudGroup = new THREE.Group();
+        const cloudMat = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.6,
+            roughness: 1
+        });
+        for (let j = 0; j < 5; j++) {
+            const size = 3 + Math.random() * 5;
+            const sphere = new THREE.Mesh(new THREE.SphereGeometry(size, 8, 8), cloudMat);
+            sphere.position.set(
+                (Math.random() - 0.5) * 8,
+                (Math.random() - 0.5) * 2,
+                (Math.random() - 0.5) * 4
+            );
+            cloudGroup.add(sphere);
+        }
+        cloudGroup.position.set(
+            (Math.random() - 0.5) * 200,
+            40 + Math.random() * 30,
+            (Math.random() - 0.5) * 200
+        );
+        cloudGroup.userData = { speed: 0.02 + Math.random() * 0.03 };
+        scene.add(cloudGroup);
+        clouds.push(cloudGroup);
+    }
+}
+
+function createGrid() {
+    gridHelper = new THREE.GridHelper(gridSize * cellSize, gridSize, 0x000000, 0x333333);
+    gridHelper.position.y = 0.05;
+    gridHelper.material.transparent = true;
+    gridHelper.material.opacity = 0.15;
+    scene.add(gridHelper);
+}
+
+function createEnvironment() {
+    // Trees around the edge
+    for (let i = 0; i < 40; i++) {
+        const angle = (i / 40) * Math.PI * 2;
+        const radius = 38 + Math.random() * 8;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        createEnvTree(x, z);
+    }
+
+    // Rocks
+    for (let i = 0; i < 12; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 30 + Math.random() * 15;
+        const x = Math.cos(angle) * radius;
+        const z = Math.sin(angle) * radius;
+        createRock(x, z);
+    }
+
+    // Mushrooms
+    for (let i = 0; i < 8; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const radius = 35 + Math.random() * 10;
+        createMushroom(Math.cos(angle) * radius, Math.sin(angle) * radius);
+    }
+}
+
+function createEnvTree(x, z) {
+    const tree = new THREE.Group();
+
+    // Trunk
+    const trunkGeo = new THREE.CylinderGeometry(0.3, 0.5, 3, 8);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5D4037, roughness: 0.9 });
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.y = 1.5;
+    trunk.castShadow = true;
+    tree.add(trunk);
+
+    // Foliage layers
+    const colors = [0x2E7D32, 0x388E3C, 0x43A047];
+    for (let i = 0; i < 3; i++) {
+        const size = 2.5 - i * 0.6;
+        const leafGeo = new THREE.ConeGeometry(size, 2.5, 8);
+        const leafMat = new THREE.MeshStandardMaterial({ color: colors[i], roughness: 0.8 });
+        const leaf = new THREE.Mesh(leafGeo, leafMat);
+        leaf.position.y = 3 + i * 1.5;
+        leaf.castShadow = true;
+        tree.add(leaf);
+    }
+
+    tree.position.set(x, 0, z);
+    tree.scale.multiplyScalar(0.8 + Math.random() * 0.5);
+    scene.add(tree);
+}
+
+function createRock(x, z) {
+    const rockGeo = new THREE.DodecahedronGeometry(1 + Math.random(), 0);
+    const rockMat = new THREE.MeshStandardMaterial({
+        color: 0x808080,
+        roughness: 0.9,
+        metalness: 0.1,
+        flatShading: true
+    });
+    const rock = new THREE.Mesh(rockGeo, rockMat);
+    rock.position.set(x, 0.5, z);
+    rock.rotation.set(Math.random(), Math.random(), Math.random());
+    rock.castShadow = true;
+    scene.add(rock);
+}
+
+function createMushroom(x, z) {
+    const mush = new THREE.Group();
+    const stemGeo = new THREE.CylinderGeometry(0.15, 0.2, 0.6, 8);
+    const stemMat = new THREE.MeshStandardMaterial({ color: 0xF5F5DC });
+    const stem = new THREE.Mesh(stemGeo, stemMat);
+    stem.position.y = 0.3;
+    mush.add(stem);
+
+    const capGeo = new THREE.SphereGeometry(0.4, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2);
+    const capMat = new THREE.MeshStandardMaterial({ color: Math.random() > 0.5 ? 0xff0000 : 0x9C27B0 });
+    const cap = new THREE.Mesh(capGeo, capMat);
+    cap.position.y = 0.6;
+    mush.add(cap);
+
+    mush.position.set(x, 0, z);
+    scene.add(mush);
+}
+
+// --- BUILDING 3D MODELS ---
+function createBuildingMesh(type, level) {
+    const def = BUILDINGS[type];
+    const group = new THREE.Group();
+    const levelScale = 1 + (level - 1) * 0.05;
+
+    switch(type) {
+        case 'cannon':
+            createCannonModel(group, level);
+            break;
+        case 'archerTower':
+            createArcherTowerModel(group, level);
+            break;
+        case 'mortar':
+            createMortarModel(group, level);
+            break;
+        case 'airDefense':
+            createAirDefenseModel(group, level);
+            break;
+        case 'wizardTower':
+            createWizardTowerModel(group, level);
+            break;
+        case 'xbow':
+            createXBowModel(group, level);
+            break;
+        case 'infernoTower':
+            createInfernoModel(group, level);
+            break;
+        case 'goldMine':
+            createGoldMineModel(group, level);
+            break;
+        case 'elixirCollector':
+            createElixirCollectorModel(group, level);
+            break;
+        case 'goldStorage':
+            createGoldStorageModel(group, level);
+            break;
+        case 'elixirStorage':
+            createElixirStorageModel(group, level);
+            break;
+        case 'darkDrill':
+            createDarkDrillModel(group, level);
+            break;
+        case 'armyCamp':
+            createArmyCampModel(group, level);
+            break;
+        case 'barracks':
+            createBarracksModel(group, level);
+            break;
+        case 'darkBarracks':
+            createDarkBarracksModel(group, level);
+            break;
+        case 'lab':
+            createLabModel(group, level);
+            break;
+        case 'spellFactory':
+            createSpellFactoryModel(group, level);
+            break;
+        case 'heroAltar':
+            createHeroAltarModel(group, level);
+            break;
+        case 'wall':
+            createWallModel(group, level);
+            break;
+        case 'bomb':
+        case 'springTrap':
+        case 'airBomb':
+            createTrapModel(group, type, level);
+            break;
+        case 'tree':
+            createDecoTree(group);
+            break;
+        case 'flag':
+            createFlagModel(group);
+            break;
+        case 'torch':
+            createTorchModel(group);
+            break;
+        case 'statue':
+            createStatueModel(group);
+            break;
+        case 'fountain':
+            createFountainModel(group);
+            break;
+        default:
+            // Generic building
+            const box = new THREE.Mesh(
+                new THREE.BoxGeometry(def.size * cellSize * 0.8, 2, def.size * cellSize * 0.8),
+                new THREE.MeshStandardMaterial({ color: def.color, roughness: 0.7 })
+            );
+            box.position.y = 1;
+            box.castShadow = true;
+            group.add(box);
+    }
+
+    group.scale.multiplyScalar(levelScale);
+    return group;
+}
+
+function createCannonModel(group, level) {
+    // Base platform
+    const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.4, 0.6, 12),
+        new THREE.MeshStandardMaterial({ color: 0x8B7355, roughness: 0.8 })
+    );
+    base.position.y = 0.3;
+    base.castShadow = true;
+    group.add(base);
+
+    // Upper base
+    const upperBase = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.9, 1.1, 0.4, 12),
+        new THREE.MeshStandardMaterial({ color: level >= 5 ? 0x555555 : 0x8B6914 })
+    );
+    upperBase.position.y = 0.8;
+    upperBase.castShadow = true;
+    group.add(upperBase);
+
+    // Barrel
+    const barrelColor = level >= 10 ? 0x1a1a1a : level >= 5 ? 0x444444 : 0x654321;
+    const barrel = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.25, 0.35, 2, 8),
+        new THREE.MeshStandardMaterial({ color: barrelColor, metalness: 0.5 })
+    );
+    barrel.rotation.z = Math.PI / 6;
+    barrel.position.set(0.6, 1.5, 0);
+    barrel.castShadow = true;
+    group.add(barrel);
+
+    // Rivets
+    for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const rivet = new THREE.Mesh(
+            new THREE.SphereGeometry(0.08, 6, 6),
+            new THREE.MeshStandardMaterial({ color: 0xCCCCCC, metalness: 0.8 })
+        );
+        rivet.position.set(Math.cos(angle) * 1.1, 0.5, Math.sin(angle) * 1.1);
+        group.add(rivet);
+    }
+}
+
+function createArcherTowerModel(group, level) {
+    // Stone base
+    const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(1, 1.3, 1, 8),
+        new THREE.MeshStandardMaterial({ color: level >= 8 ? 0x555555 : 0x8B8682, roughness: 0.9, flatShading: true })
+    );
+    base.position.y = 0.5;
+    base.castShadow = true;
+    group.add(base);
+
+    // Tower body
+    const tower = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.7, 0.9, 3, 8),
+        new THREE.MeshStandardMaterial({ color: level >= 8 ? 0x444444 : 0x795548 })
+    );
+    tower.position.y = 2.5;
+    tower.castShadow = true;
+    group.add(tower);
+
+    // Platform
+    const platform = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 0.7, 0.3, 8),
+        new THREE.MeshStandardMaterial({ color: 0x5D4037 })
+    );
+    platform.position.y = 4.1;
+    platform.castShadow = true;
+    group.add(platform);
+
+    // Crenellations
+    for (let i = 0; i < 6; i++) {
+        const angle = (i / 6) * Math.PI * 2;
+        const cren = new THREE.Mesh(
+            new THREE.BoxGeometry(0.3, 0.5, 0.2),
+            new THREE.MeshStandardMaterial({ color: 0x5D4037 })
+        );
+        cren.position.set(Math.cos(angle) * 1.1, 4.5, Math.sin(angle) * 1.1);
+        cren.lookAt(0, 4.5, 0);
+        group.add(cren);
+    }
+
+    // Roof
+    const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(1.3, 1.5, 8),
+        new THREE.MeshStandardMaterial({ color: level >= 10 ? 0x8B0000 : 0xcc4444, roughness: 0.7 })
+    );
+    roof.position.y = 5.2;
+    roof.castShadow = true;
+    group.add(roof);
+}
+
+function createMortarModel(group, level) {
+    const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.3, 1.5, 0.8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x696969, roughness: 0.8, flatShading: true })
+    );
+    base.position.y = 0.4;
+    base.castShadow = true;
+    group.add(base);
+
+    const tube = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.6, 0.5, 1.5, 12),
+        new THREE.MeshStandardMaterial({ color: level >= 5 ? 0x333333 : 0x555555, metalness: 0.4 })
+    );
+    tube.position.y = 1.5;
+    tube.castShadow = true;
+    group.add(tube);
+
+    // Opening
+    const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.5, 0.1, 8, 12),
+        new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.6 })
+    );
+    ring.position.y = 2.3;
+    ring.rotation.x = Math.PI / 2;
+    group.add(ring);
+}
+
+function createAirDefenseModel(group, level) {
+    const base = new THREE.Mesh(
+        new THREE.BoxGeometry(2, 0.5, 2),
+        new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.7 })
+    );
+    base.position.y = 0.25;
+    base.castShadow = true;
+    group.add(base);
+
+    // Rockets
+    for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        const rocket = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.15, 0.2, 2, 8),
+            new THREE.MeshStandardMaterial({ color: 0xcc0000, metalness: 0.3 })
+        );
+        rocket.position.set(Math.cos(angle) * 0.6, 1.5, Math.sin(angle) * 0.6);
+        rocket.castShadow = true;
+        group.add(rocket);
+
+        const tip = new THREE.Mesh(
+            new THREE.ConeGeometry(0.15, 0.4, 8),
+            new THREE.MeshStandardMaterial({ color: 0xff0000 })
+        );
+        tip.position.set(Math.cos(angle) * 0.6, 2.7, Math.sin(angle) * 0.6);
+        group.add(tip);
+    }
+
+    // Center post
+    const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.15, 0.15, 2.5, 8),
+        new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.5 })
+    );
+    post.position.y = 1.5;
+    group.add(post);
+}
+
+function createWizardTowerModel(group, level) {
+    const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.4, 1, 6),
+        new THREE.MeshStandardMaterial({ color: 0x4a148c, roughness: 0.7 })
+    );
+    base.position.y = 0.5;
+    base.castShadow = true;
+    group.add(base);
+
+    const tower = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.8, 1.1, 3, 6),
+        new THREE.MeshStandardMaterial({ color: 0x6a0dad })
+    );
+    tower.position.y = 2.5;
+    tower.castShadow = true;
+    group.add(tower);
+
+    const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(1.2, 2, 6),
+        new THREE.MeshStandardMaterial({ color: 0x1a237e })
+    );
+    roof.position.y = 5;
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Magic orb
+    const orb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3, 16, 16),
+        new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x00e5ff, emissiveIntensity: 0.8 })
+    );
+    orb.position.y = 6.1;
+    group.add(orb);
+
+    // Magic glow
+    const glow = new THREE.PointLight(0x7c4dff, 1, 8);
+    glow.position.y = 4;
+    group.add(glow);
+}
+
+function createXBowModel(group, level) {
+    const base = new THREE.Mesh(
+        new THREE.BoxGeometry(2.5, 0.5, 2.5),
+        new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.3 })
+    );
+    base.position.y = 0.25;
+    base.castShadow = true;
+    group.add(base);
+
+    const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.6, 0.6, 2.5),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a1a, metalness: 0.6 })
+    );
+    body.position.y = 1;
+    body.rotation.y = Math.PI / 4;
+    body.castShadow = true;
+    group.add(body);
+
+    // Arms
+    for (let s = -1; s <= 1; s += 2) {
+        const arm = new THREE.Mesh(
+            new THREE.BoxGeometry(2, 0.15, 0.2),
+            new THREE.MeshStandardMaterial({ color: 0x5D4037 })
+        );
+        arm.position.set(s * 0.3, 1.2, 0);
+        arm.rotation.z = s * 0.3;
+        group.add(arm);
+    }
+}
+
+function createInfernoModel(group, level) {
+    const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.4, 0.8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.5 })
+    );
+    base.position.y = 0.4;
+    base.castShadow = true;
+    group.add(base);
+
+    const tower = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.5, 0.8, 3, 8),
+        new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.4 })
+    );
+    tower.position.y = 2.3;
+    tower.castShadow = true;
+    group.add(tower);
+
+    // Fire
+    const fire = new THREE.PointLight(0xff4400, 2, 10);
+    fire.position.y = 4;
+    group.add(fire);
+
+    const fireOrb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.4, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0xff4400, emissive: 0xff2200, emissiveIntensity: 1 })
+    );
+    fireOrb.position.y = 4;
+    group.add(fireOrb);
+
+    // Lava ring
+    const lavaRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.7, 0.1, 8, 16),
+        new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff3300, emissiveIntensity: 0.5 })
+    );
+    lavaRing.position.y = 3.5;
+    lavaRing.rotation.x = Math.PI / 2;
+    group.add(lavaRing);
+}
+
+function createGoldMineModel(group, level) {
+    // Main structure
+    const body = new THREE.Mesh(
+        new THREE.BoxGeometry(2.5, 1.5, 2.5),
+        new THREE.MeshStandardMaterial({ color: 0x8B6914, roughness: 0.8 })
+    );
+    body.position.y = 0.75;
+    body.castShadow = true;
+    group.add(body);
+
+    // Roof
+    const roof = new THREE.Mesh(
+        new THREE.BoxGeometry(2.8, 0.3, 2.8),
+        new THREE.MeshStandardMaterial({ color: 0x5D4037 })
+    );
+    roof.position.y = 1.65;
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Wheel
+    const wheel = new THREE.Mesh(
+        new THREE.TorusGeometry(0.6, 0.1, 8, 16),
+        new THREE.MeshStandardMaterial({ color: 0x795548 })
+    );
+    wheel.position.set(0, 2.2, 0);
+    group.add(wheel);
+
+    // Gold pile
+    const goldPile = new THREE.Mesh(
+        new THREE.SphereGeometry(0.4, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.7, roughness: 0.3 })
+    );
+    goldPile.position.set(0.5, 0.05, 0.8);
+    group.add(goldPile);
+}
+
+function createElixirCollectorModel(group, level) {
+    const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(1, 1.2, 2, 8),
+        new THREE.MeshStandardMaterial({ color: 0x7B1FA2, roughness: 0.6 })
+    );
+    body.position.y = 1;
+    body.castShadow = true;
+    group.add(body);
+
+    // Glass top
+    const glass = new THREE.Mesh(
+        new THREE.SphereGeometry(0.8, 12, 12),
+        new THREE.MeshStandardMaterial({ color: 0xCE93D8, transparent: true, opacity: 0.6, metalness: 0.2 })
+    );
+    glass.position.y = 2.2;
+    group.add(glass);
+
+    // Elixir glow
+    const glow = new THREE.PointLight(0xe040fb, 0.5, 5);
+    glow.position.y = 2;
+    group.add(glow);
+
+    // Pipes
+    for (let i = 0; i < 3; i++) {
+        const angle = (i / 3) * Math.PI * 2;
+        const pipe = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.08, 0.08, 1.5, 6),
+            new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.5 })
+        );
+        pipe.position.set(Math.cos(angle) * 1.1, 1, Math.sin(angle) * 1.1);
+        group.add(pipe);
+    }
+}
+
+function createGoldStorageModel(group, level) {
+    const body = new THREE.Mesh(
+        new THREE.BoxGeometry(2.5, 2, 2.5),
+        new THREE.MeshStandardMaterial({ color: 0xB8860B, roughness: 0.6 })
+    );
+    body.position.y = 1;
+    body.castShadow = true;
+    group.add(body);
+
+    // Gold top
+    const gold = new THREE.Mesh(
+        new THREE.BoxGeometry(2, 0.5, 2),
+        new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.8, roughness: 0.2 })
+    );
+    gold.position.y = 2.25;
+    gold.castShadow = true;
+    group.add(gold);
+
+    // Coins
+    for (let i = 0; i < 5; i++) {
+        const coin = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.15, 0.15, 0.05, 8),
+            new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.9 })
+        );
+        coin.position.set((Math.random() - 0.5) * 1.5, 2.55, (Math.random() - 0.5) * 1.5);
+        coin.rotation.x = Math.PI / 2 + Math.random() * 0.3;
+        group.add(coin);
+    }
+}
+
+function createElixirStorageModel(group, level) {
+    const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.3, 1.4, 2.5, 10),
+        new THREE.MeshStandardMaterial({ color: 0x4A148C, roughness: 0.5 })
+    );
+    body.position.y = 1.25;
+    body.castShadow = true;
+    group.add(body);
+
+    // Elixir top
+    const liquid = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.1, 1.1, 0.3, 10),
+        new THREE.MeshStandardMaterial({ color: 0xE040FB, transparent: true, opacity: 0.7, emissive: 0x7B1FA2, emissiveIntensity: 0.3 })
+    );
+    liquid.position.y = 2.5;
+    group.add(liquid);
+
+    const glow = new THREE.PointLight(0xe040fb, 0.6, 6);
+    glow.position.y = 2;
+    group.add(glow);
+}
+
+function createDarkDrillModel(group, level) {
+    const base = new THREE.Mesh(
+        new THREE.BoxGeometry(2.5, 1, 2.5),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.5 })
+    );
+    base.position.y = 0.5;
+    base.castShadow = true;
+    group.add(base);
+
+    const drill = new THREE.Mesh(
+        new THREE.ConeGeometry(0.3, 2, 8),
+        new THREE.MeshStandardMaterial({ color: 0x333333, metalness: 0.7 })
+    );
+    drill.position.y = 2;
+    drill.rotation.z = Math.PI;
+    group.add(drill);
+
+    const arm = new THREE.Mesh(
+        new THREE.BoxGeometry(0.2, 1.5, 0.2),
+        new THREE.MeshStandardMaterial({ color: 0x444444, metalness: 0.5 })
+    );
+    arm.position.set(0.3, 1.5, 0);
+    arm.rotation.z = 0.3;
+    group.add(arm);
+}
+
+function createArmyCampModel(group, level) {
+    // Ground mat
+    const mat = new THREE.Mesh(
+        new THREE.CylinderGeometry(2.5, 2.5, 0.1, 16),
+        new THREE.MeshStandardMaterial({ color: 0xD2B48C, roughness: 1 })
+    );
+    mat.position.y = 0.05;
+    mat.receiveShadow = true;
+    group.add(mat);
+
+    // Tent
+    const tent = new THREE.Mesh(
+        new THREE.ConeGeometry(1.5, 2, 4),
+        new THREE.MeshStandardMaterial({ color: 0xDEB887, roughness: 0.9 })
+    );
+    tent.position.y = 1;
+    tent.rotation.y = Math.PI / 4;
+    tent.castShadow = true;
+    group.add(tent);
+
+    // Posts
+    for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        const post = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.08, 0.08, 1.5, 6),
+            new THREE.MeshStandardMaterial({ color: 0x5D4037 })
+        );
+        post.position.set(Math.cos(angle) * 2.2, 0.75, Math.sin(angle) * 2.2);
+        group.add(post);
+    }
+
+    // Campfire
+    const fireLight = new THREE.PointLight(0xff6600, 0.5, 5);
+    fireLight.position.set(1.5, 0.5, 1.5);
+    group.add(fireLight);
+}
+
+function createBarracksModel(group, level) {
+    const body = new THREE.Mesh(
+        new THREE.BoxGeometry(3, 2, 3),
+        new THREE.MeshStandardMaterial({ color: 0x795548, roughness: 0.7 })
+    );
+    body.position.y = 1;
+    body.castShadow = true;
+    group.add(body);
+
+    // Roof
+    const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(2.5, 1.5, 4),
+        new THREE.MeshStandardMaterial({ color: 0x8B0000 })
+    );
+    roof.position.y = 2.75;
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Door
+    const door = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 1.2, 0.1),
+        new THREE.MeshStandardMaterial({ color: 0x3E2723 })
+    );
+    door.position.set(0, 0.6, 1.56);
+    group.add(door);
+
+    // Sword emblem
+    const sword = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.8, 0.1),
+        new THREE.MeshStandardMaterial({ color: 0xCCCCCC, metalness: 0.8 })
+    );
+    sword.position.set(0, 1.8, 1.56);
+    group.add(sword);
+}
+
+function createDarkBarracksModel(group, level) {
+    const body = new THREE.Mesh(
+        new THREE.BoxGeometry(3, 2.5, 3),
+        new THREE.MeshStandardMaterial({ color: 0x1a0033, roughness: 0.6 })
+    );
+    body.position.y = 1.25;
+    body.castShadow = true;
+    group.add(body);
+
+    const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(2.5, 2, 4),
+        new THREE.MeshStandardMaterial({ color: 0x2c003e })
+    );
+    roof.position.y = 3.5;
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Skulls
+    for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * Math.PI * 2;
+        const skull = new THREE.Mesh(
+            new THREE.SphereGeometry(0.2, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0xEEEECC })
+        );
+        skull.position.set(Math.cos(angle) * 1.6, 2.2, Math.sin(angle) * 1.6);
+        group.add(skull);
+    }
+
+    const glow = new THREE.PointLight(0x7c4dff, 0.8, 6);
+    glow.position.y = 3;
+    group.add(glow);
+}
+
+function createLabModel(group, level) {
+    const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.5, 1.8, 2, 6),
+        new THREE.MeshStandardMaterial({ color: 0x0277BD })
+    );
+    body.position.y = 1;
+    body.castShadow = true;
+    group.add(body);
+
+    const dome = new THREE.Mesh(
+        new THREE.SphereGeometry(1.5, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0x4FC3F7, transparent: true, opacity: 0.5 })
+    );
+    dome.position.y = 2;
+    group.add(dome);
+
+    // Bubbles
+    for (let i = 0; i < 5; i++) {
+        const bubble = new THREE.Mesh(
+            new THREE.SphereGeometry(0.1 + Math.random() * 0.15, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0x00E5FF, emissive: 0x00BCD4, emissiveIntensity: 0.5, transparent: true, opacity: 0.7 })
+        );
+        bubble.position.set(
+            (Math.random() - 0.5) * 2,
+            2 + Math.random() * 1,
+            (Math.random() - 0.5) * 2
+        );
+        bubble.userData.floatSpeed = 0.5 + Math.random();
+        bubble.userData.floatOffset = Math.random() * Math.PI * 2;
+        group.add(bubble);
+    }
+}
+
+function createSpellFactoryModel(group, level) {
+    const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.2, 1.4, 2, 8),
+        new THREE.MeshStandardMaterial({ color: 0x4A148C })
+    );
+    body.position.y = 1;
+    body.castShadow = true;
+    group.add(body);
+
+    // Cauldron top
+    const cauldron = new THREE.Mesh(
+        new THREE.SphereGeometry(1, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0x7B1FA2, emissive: 0x4A148C, emissiveIntensity: 0.3 })
+    );
+    cauldron.position.y = 2;
+    cauldron.rotation.x = Math.PI;
+    group.add(cauldron);
+
+    const glow = new THREE.PointLight(0xAB47BC, 1, 8);
+    glow.position.y = 2.5;
+    group.add(glow);
+}
+
+function createHeroAltarModel(group, level) {
+    const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.5, 1.8, 0.5, 6),
+        new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5 })
+    );
+    base.position.y = 0.25;
+    group.add(base);
+
+    const pillar = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.3, 2, 8),
+        new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.8 })
+    );
+    pillar.position.y = 1.5;
+    pillar.castShadow = true;
+    group.add(pillar);
+
+    // Crown
+    const crown = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.5, 0.3, 0.4, 5),
+        new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.9, emissive: 0xFFAB00, emissiveIntensity: 0.3 })
+    );
+    crown.position.y = 2.7;
+    group.add(crown);
+
+    const glow = new THREE.PointLight(0xffd700, 1, 8);
+    glow.position.y = 3;
+    group.add(glow);
+}
+
+function createWallModel(group, level) {
+    const colors = [0x8B8682, 0x795548, 0x5D4037, 0x424242, 0x333333, 0x9C27B0, 0xFFD700, 0x212121, 0x0D47A1, 0x1B5E20, 0xBF360C, 0xF44336, 0x1a1a1a, 0xFFD700];
+    const color = colors[Math.min(level - 1, colors.length - 1)];
+    const height = 1.5 + (level - 1) * 0.1;
+
+    const wall = new THREE.Mesh(
+        new THREE.BoxGeometry(cellSize * 0.9, height, cellSize * 0.9),
+        new THREE.MeshStandardMaterial({ color: color, roughness: 0.7, metalness: level > 8 ? 0.3 : 0 })
+    );
+    wall.position.y = height / 2;
+    wall.castShadow = true;
+    group.add(wall);
+
+    // Top detail
+    if (level >= 3) {
+        for (let i = -1; i <= 1; i += 2) {
+            const top = new THREE.Mesh(
+                new THREE.BoxGeometry(cellSize * 0.3, 0.3, cellSize * 0.3),
+                new THREE.MeshStandardMaterial({ color: color })
+            );
+            top.position.set(i * cellSize * 0.25, height + 0.15, 0);
+            group.add(top);
+        }
+    }
+}
+
+function createTrapModel(group, type, level) {
+    if (type === 'bomb') {
+        const bomb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.4, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0x333333 })
+        );
+        bomb.position.y = 0.4;
+        group.add(bomb);
+
+        const fuse = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.03, 0.03, 0.4, 4),
+            new THREE.MeshStandardMaterial({ color: 0x8B6914 })
+        );
+        fuse.position.y = 0.8;
+        fuse.rotation.z = 0.3;
+        group.add(fuse);
+    } else if (type === 'springTrap') {
+        const base = new THREE.Mesh(
+            new THREE.BoxGeometry(1, 0.2, 1),
+            new THREE.MeshStandardMaterial({ color: 0x4CAF50 })
+        );
+        base.position.y = 0.1;
+        group.add(base);
+
+        const spring = new THREE.Mesh(
+            new THREE.TorusGeometry(0.3, 0.06, 8, 12),
+            new THREE.MeshStandardMaterial({ color: 0xCCCCCC, metalness: 0.7 })
+        );
+        spring.position.y = 0.3;
+        spring.rotation.x = Math.PI / 2;
+        group.add(spring);
+    } else {
+        const bomb = new THREE.Mesh(
+            new THREE.SphereGeometry(0.35, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0xff4444 })
+        );
+        bomb.position.y = 0.35;
+        group.add(bomb);
+    }
+}
+
+function createDecoTree(group) {
+    const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.3, 2, 6),
+        new THREE.MeshStandardMaterial({ color: 0x5D4037 })
+    );
+    trunk.position.y = 1;
+    trunk.castShadow = true;
+    group.add(trunk);
+
+    for (let i = 0; i < 3; i++) {
+        const leaf = new THREE.Mesh(
+            new THREE.SphereGeometry(0.8 - i * 0.15, 8, 8),
+            new THREE.MeshStandardMaterial({ color: 0x2E7D32 })
+        );
+        leaf.position.y = 2 + i * 0.6;
+        leaf.castShadow = true;
+        group.add(leaf);
+    }
+}
+
+function createFlagModel(group) {
+    const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.05, 0.05, 3, 6),
+        new THREE.MeshStandardMaterial({ color: 0x795548 })
+    );
+    pole.position.y = 1.5;
+    pole.castShadow = true;
+    group.add(pole);
+
+    const flag = new THREE.Mesh(
+        new THREE.PlaneGeometry(1, 0.6),
+        new THREE.MeshStandardMaterial({ color: 0xff0000, side: THREE.DoubleSide })
+    );
+    flag.position.set(0.5, 2.7, 0);
+    group.add(flag);
+}
+
+function createTorchModel(group) {
+    const pole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.08, 0.1, 2, 6),
+        new THREE.MeshStandardMaterial({ color: 0x5D4037 })
+    );
+    pole.position.y = 1;
+    pole.castShadow = true;
+    group.add(pole);
+
+    const fire = new THREE.PointLight(0xff6600, 1.5, 8);
+    fire.position.y = 2.2;
+    group.add(fire);
+
+    const flame = new THREE.Mesh(
+        new THREE.ConeGeometry(0.2, 0.5, 6),
+        new THREE.MeshStandardMaterial({ color: 0xff6600, emissive: 0xff4400, emissiveIntensity: 1 })
+    );
+    flame.position.y = 2.3;
+    group.add(flame);
+}
+
+function createStatueModel(group) {
+    const base = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 0.5, 1),
+        new THREE.MeshStandardMaterial({ color: 0x696969 })
+    );
+    base.position.y = 0.25;
+    group.add(base);
+
+    const body = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.3, 0.4, 2, 8),
+        new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.5 })
+    );
+    body.position.y = 1.5;
+    body.castShadow = true;
+    group.add(body);
+
+    const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x808080 })
+    );
+    head.position.y = 2.8;
+    group.add(head);
+}
+
+function createFountainModel(group) {
+    const base = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.5, 1.8, 0.5, 12),
+        new THREE.MeshStandardMaterial({ color: 0x9E9E9E })
+    );
+    base.position.y = 0.25;
+    group.add(base);
+
+    const pool = new THREE.Mesh(
+        new THREE.CylinderGeometry(1.3, 1.3, 0.3, 12),
+        new THREE.MeshStandardMaterial({ color: 0x4fc3f7, transparent: true, opacity: 0.6 })
+    );
+    pool.position.y = 0.5;
+    group.add(pool);
+
+    const pillar = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.25, 1.5, 8),
+        new THREE.MeshStandardMaterial({ color: 0xBDBDBD })
+    );
+    pillar.position.y = 1.25;
+    group.add(pillar);
+
+    const top = new THREE.Mesh(
+        new THREE.SphereGeometry(0.3, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0x4fc3f7, emissive: 0x0288D1, emissiveIntensity: 0.3 })
+    );
+    top.position.y = 2.1;
+    group.add(top);
+}
+
+// Town Hall model
+function createTownHallModel(level) {
+    const group = new THREE.Group();
+
+    const bodyColor = level >= 8 ? 0x333333 : level >= 5 ? 0x5D4037 : 0x8B6914;
+    const roofColor = level >= 8 ? 0xff0000 : level >= 5 ? 0x8B0000 : 0xcc4444;
+
+    // Main body
+    const body = new THREE.Mesh(
+        new THREE.BoxGeometry(4, 3, 4),
+        new THREE.MeshStandardMaterial({ color: bodyColor, roughness: 0.6 })
+    );
+    body.position.y = 1.5;
+    body.castShadow = true;
+    group.add(body);
+
+    // Upper level
+    const upper = new THREE.Mesh(
+        new THREE.BoxGeometry(3, 1.5, 3),
+        new THREE.MeshStandardMaterial({ color: bodyColor })
+    );
+    upper.position.y = 3.75;
+    upper.castShadow = true;
+    group.add(upper);
+
+    // Roof
+    const roof = new THREE.Mesh(
+        new THREE.ConeGeometry(2.8, 2, 4),
+        new THREE.MeshStandardMaterial({ color: roofColor })
+    );
+    roof.position.y = 5.5;
+    roof.rotation.y = Math.PI / 4;
+    roof.castShadow = true;
+    group.add(roof);
+
+    // Door
+    const door = new THREE.Mesh(
+        new THREE.BoxGeometry(1, 1.8, 0.15),
+        new THREE.MeshStandardMaterial({ color: 0x3E2723 })
+    );
+    door.position.set(0, 0.9, 2.08);
+    group.add(door);
+
+    // Windows
+    for (let x = -1; x <= 1; x += 2) {
+        const win = new THREE.Mesh(
+            new THREE.BoxGeometry(0.5, 0.6, 0.15),
+            new THREE.MeshStandardMaterial({ color: 0xFFEB3B, emissive: 0xFFA000, emissiveIntensity: 0.3 })
+        );
+        win.position.set(x * 1.2, 2.2, 2.08);
+        group.add(win);
+    }
+
+    // Level number display
+    const levelSign = new THREE.Mesh(
+        new THREE.BoxGeometry(0.8, 0.6, 0.15),
+        new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.8 })
+    );
+    levelSign.position.set(0, 3.5, 2.08);
+    group.add(levelSign);
+
+    // Towers at corners
+    if (level >= 3) {
+        for (let x = -1; x <= 1; x += 2) {
+            for (let z = -1; z <= 1; z += 2) {
+                const tower = new THREE.Mesh(
+                    new THREE.CylinderGeometry(0.4, 0.5, 4, 8),
+                    new THREE.MeshStandardMaterial({ color: bodyColor })
+                );
+                tower.position.set(x * 2, 2, z * 2);
+                tower.castShadow = true;
+                group.add(tower);
+
+                const towerRoof = new THREE.Mesh(
+                    new THREE.ConeGeometry(0.6, 1, 8),
+                    new THREE.MeshStandardMaterial({ color: roofColor })
+                );
+                towerRoof.position.set(x * 2, 4.5, z * 2);
+                group.add(towerRoof);
+            }
+        }
+    }
+
+    // Flag
+    if (level >= 2) {
+        const flagPole = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.04, 0.04, 2, 4),
+            new THREE.MeshStandardMaterial({ color: 0x795548 })
+        );
+        flagPole.position.y = 7.5;
+        group.add(flagPole);
+
+        const flag = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.8, 0.5),
+            new THREE.MeshStandardMaterial({ color: 0xff0000, side: THREE.DoubleSide })
+        );
+        flag.position.set(0.4, 8.2, 0);
+        group.add(flag);
+    }
+
+    return group;
+}
+
+// --- GAME LOGIC ---
+function worldToGrid(x, z) {
+    return {
+        gx: Math.round(x / cellSize),
+        gz: Math.round(z / cellSize)
+    };
+}
+
+function gridToWorld(gx, gz) {
+    return { x: gx * cellSize, z: gz * cellSize };
+}
+
+function isCellOccupied(gx, gz, size, excludeIndex) {
+    for (let i = 0; i < GameState.buildings.length; i++) {
+        if (i === excludeIndex) continue;
+        const b = GameState.buildings[i];
+        const bDef = b.type === 'townhall' ? { size: 3 } : BUILDINGS[b.type];
+        if (!bDef) continue;
+        const bSize = bDef.size;
+        for (let dx = 0; dx < size; dx++) {
+            for (let dz = 0; dz < size; dz++) {
+                for (let bx = 0; bx < bSize; bx++) {
+                    for (let bz = 0; bz < bSize; bz++) {
+                        if (gx + dx === b.gx + bx && gz + dz === b.gz + bz) return true;
+                    }
+                }
+            }
+        }
+    }
+    return false;
+}
+
+function placeInitialBuildings() {
+    // Check if town hall exists
+    const hasTH = GameState.buildings.some(b => b.type === 'townhall');
+    if (!hasTH) {
+        const th = {
+            type: 'townhall',
+            gx: -1, gz: -1,
+            level: 1,
+            hp: 1500,
+            maxHp: 1500
+        };
+        GameState.buildings.push(th);
+        const mesh = createTownHallModel(1);
+        const pos = gridToWorld(th.gx, th.gz);
+        mesh.position.set(pos.x + cellSize, 0, pos.z + cellSize);
+        mesh.userData = { buildingIndex: GameState.buildings.length - 1 };
+        scene.add(mesh);
+        buildingMeshes.push(mesh);
+    }
+}
+
+function placeBuilding(type) {
+    const def = BUILDINGS[type];
+    if (!def) return;
+
+    // Check cost
+    if (def.costType === 'gold' && GameState.gold < def.cost) {
+        showToast('❌ No tienes suficiente oro');
+        return;
+    }
+    if (def.costType === 'elixir' && GameState.elixir < def.cost) {
+        showToast('❌ No tienes suficiente elixir');
+        return;
+    }
+    if (def.costType === 'darkElixir' && GameState.darkElixir < def.cost) {
+        showToast('❌ No tienes suficiente elixir oscuro');
+        return;
+    }
+
+    closeAllPanels();
+
+    // Enter placement mode
+    GameState.placingBuilding = type;
+
+    // Create ghost
+    const ghost = createBuildingMesh(type, 1);
+    ghost.traverse(c => {
+        if (c.material) {
+            c.material = c.material.clone();
+            c.material.transparent = true;
+            c.material.opacity = 0.5;
+        }
+    });
+    ghost.position.set(0, 0, 0);
+    scene.add(ghost);
+    GameState.placementGhost = ghost;
+
+    document.getElementById('placementInfo').classList.add('active');
+    document.getElementById('placementText').textContent = `Coloca: ${def.name} (${def.cost} ${def.costType === 'gold' ? '💰' : def.costType === 'elixir' ? '🧪' : '🛢️'})`;
+}
+
+function confirmPlacement() {
+    const type = GameState.placingBuilding;
+    const def = BUILDINGS[type];
+    if (!type || !GameState.placementGhost) return;
+
+    const pos = GameState.placementGhost.position;
+    const grid = worldToGrid(pos.x, pos.z);
+
+    // Check bounds
+    const maxCoord = gridSize / 2 - def.size;
+    if (Math.abs(grid.gx) > maxCoord || Math.abs(grid.gz) > maxCoord) {
+        showToast('❌ Fuera de los límites');
+        return;
+    }
+
+    if (isCellOccupied(grid.gx, grid.gz, def.size, -1)) {
+        showToast('❌ Espacio ocupado');
+        return;
+    }
+
+    // Deduct cost
+    if (def.costType === 'gold') GameState.gold -= def.cost;
+    else if (def.costType === 'elixir') GameState.elixir -= def.cost;
+    else GameState.darkElixir -= def.cost;
+
+    // Remove ghost
+    scene.remove(GameState.placementGhost);
+
+    // Create real building
+    const building = {
+        type: type,
+        gx: grid.gx,
+        gz: grid.gz,
+        level: 1,
+        hp: def.hp,
+        maxHp: def.hp
+    };
+    GameState.buildings.push(building);
+
+    const mesh = createBuildingMesh(type, 1);
+    const worldPos = gridToWorld(grid.gx, grid.gz);
+    const offset = (def.size * cellSize) / 2;
+    mesh.position.set(worldPos.x + offset, 0, worldPos.z + offset);
+    mesh.userData = { buildingIndex: GameState.buildings.length - 1 };
+    mesh.castShadow = true;
+    scene.add(mesh);
+    buildingMeshes.push(mesh);
+
+    // Recalculate army cap
+    recalcArmyCap();
+
+    // XP gain
+    addXP(10);
+
+    // Effects
+    spawnParticles(mesh.position.x, 2, mesh.position.z, 0x4caf50, 15);
+    showToast(`✅ ${def.name} construido!`);
+
+    GameState.placingBuilding = null;
+    GameState.placementGhost = null;
+    document.getElementById('placementInfo').classList.remove('active');
+    updateHUD();
+}
+
+function cancelPlacement() {
+    if (GameState.placementGhost) {
+        scene.remove(GameState.placementGhost);
+    }
+    GameState.placingBuilding = null;
+    GameState.placementGhost = null;
+    document.getElementById('placementInfo').classList.remove('active');
+}
+
+function selectBuilding(index) {
+    const b = GameState.buildings[index];
+    if (!b) return;
+
+    GameState.selectedBuilding = index;
+    const def = b.type === 'townhall' ? { name: 'Ayuntamiento', icon: '🏰', maxLevel: 15, hp: 1500 + b.level * 500 } : BUILDINGS[b.type];
+
+    const upgradeCost = Math.floor((def.hp || 500) * b.level * 0.8);
+    const canUpgrade = b.level < (def.maxLevel || 15);
+
+    let statsHTML = `
+        <div class="info-header-content">
+            <div class="info-icon-big">${def.icon || '🏠'}</div>
+            <div class="info-details">
+                <h2>${def.name}</h2>
+                <div class="info-level">Nivel ${b.level} / ${def.maxLevel || 15}</div>
+            </div>
+        </div>
+        <div class="info-stats">
+            <div class="info-stat"><div class="info-stat-label">HP</div><div class="info-stat-value">${b.hp}/${b.maxHp}</div></div>
+            <div class="info-stat"><div class="info-stat-label">Nivel</div><div class="info-stat-value">${b.level}</div></div>
+    `;
+
+    if (def.dps) statsHTML += `<div class="info-stat"><div class="info-stat-label">DPS</div><div class="info-stat-value">${Math.floor(def.dps * (1 + (b.level - 1) * 0.15))}</div></div>`;
+    if (def.range) statsHTML += `<div class="info-stat"><div class="info-stat-label">Rango</div><div class="info-stat-value">${def.range}</div></div>`;
+    if (def.production) statsHTML += `<div class="info-stat"><div class="info-stat-label">Producción/h</div><div class="info-stat-value">${Math.floor(def.production * (1 + (b.level - 1) * 0.2))}</div></div>`;
+    if (def.capacity) statsHTML += `<div class="info-stat"><div class="info-stat-label">Capacidad</div><div class="info-stat-value">${Math.floor(def.capacity * (1 + (b.level - 1) * 0.3))}</div></div>`;
+
+    statsHTML += `</div>`;
+
+    if (b.upgrading) {
+        const remaining = Math.max(0, b.upgradeEnd - Date.now());
+        const total = b.upgradeEnd - b.upgradeStart;
+        const progress = ((total - remaining) / total * 100).toFixed(0);
+        statsHTML += `<div style="color:#ffd700;margin-bottom:12px;">⏳ Mejorando... ${progress}%</div>
+            <div class="upgrade-bar"><div class="upgrade-fill" style="width:${progress}%"></div></div>`;
+    }
+
+    statsHTML += `<div class="info-actions">`;
+    if (canUpgrade && !b.upgrading) {
+        statsHTML += `<button class="info-btn info-btn-upgrade" onclick="upgradeBuilding(${index})">⬆️ Mejorar (${upgradeCost} 💰)</button>`;
+    }
+    if (b.type !== 'townhall') {
+        statsHTML += `<button class="info-btn info-btn-sell" onclick="sellBuilding(${index})">💰 Vender</button>`;
+    }
+    statsHTML += `</div>`;
+
+    document.getElementById('infoPanelBody').innerHTML = statsHTML;
+    openPanel('info');
+}
+
+function upgradeBuilding(index) {
+    const b = GameState.buildings[index];
+    if (!b) return;
+    const def = b.type === 'townhall' ? { hp: 1500, maxLevel: 15 } : BUILDINGS[b.type];
+    const cost = Math.floor((def.hp || 500) * b.level * 0.8);
+
+    if (GameState.gold < cost) {
+        showToast('❌ No tienes suficiente oro');
+        return;
+    }
+
+    if (GameState.buildersUsed >= GameState.builders) {
+        showToast('❌ No hay constructores disponibles');
+        return;
+    }
+
+    GameState.gold -= cost;
+    b.upgrading = true;
+    b.upgradeStart = Date.now();
+    b.upgradeEnd = Date.now() + Math.min(b.level * 5000, 30000); // Scaled time, max 30s for gameplay
+
+    GameState.buildersUsed++;
+    showToast(`⬆️ Mejorando... (${Math.ceil((b.upgradeEnd - Date.now()) / 1000)}s)`);
+    closeAllPanels();
+    updateHUD();
+    addXP(20 * b.level);
+}
+
+function sellBuilding(index) {
+    const b = GameState.buildings[index];
+    if (!b || b.type === 'townhall') return;
+    const def = BUILDINGS[b.type];
+    const refund = Math.floor(def.cost * 0.5);
+
+    if (def.costType === 'gold') GameState.gold += refund;
+    else if (def.costType === 'elixir') GameState.elixir += refund;
+    else GameState.darkElixir += refund;
+
+    // Remove mesh
+    const mesh = buildingMeshes[index];
+    if (mesh) {
+        spawnParticles(mesh.position.x, 2, mesh.position.z, 0xf44336, 20);
+        scene.remove(mesh);
+    }
+
+    GameState.buildings.splice(index, 1);
+    buildingMeshes.splice(index, 1);
+
+    // Reindex
+    buildingMeshes.forEach((m, i) => { if (m) m.userData.buildingIndex = i; });
+
+    recalcArmyCap();
+    closeAllPanels();
+    updateHUD();
+    showToast(`💰 Vendido por ${refund}`);
+}
+
+function recalcArmyCap() {
+    let cap = 0;
+    GameState.buildings.forEach(b => {
+        if (b.type === 'armyCamp') {
+            const def = BUILDINGS.armyCamp;
+            cap += def.capacity * (1 + (b.level - 1) * 0.5);
+        }
+    });
+    GameState.armyCap = Math.max(20, Math.floor(cap));
+}
+
+// --- ARMY ---
+function renderTroopGrid() {
+    const grid = document.getElementById('troopGrid');
+    let html = '';
+    for (const [key, troop] of Object.entries(TROOPS)) {
+        const count = GameState.army[key] || 0;
+        html += `
+            <div class="troop-item ${GameState.selectedTroop === key ? 'selected' : ''}" onclick="selectTroop('${key}')">
+                ${count > 0 ? `<div class="troop-count">${count}</div>` : ''}
+                <div class="troop-emoji">${troop.icon}</div>
+                <div class="troop-name">${troop.name}</div>
+                <div class="troop-stats">❤️${troop.hp} ⚔️${troop.dps} 🏃${troop.speed}</div>
+                <div class="troop-cost">${troop.cost} ${troop.costType === 'elixir' ? '🧪' : '🛢️'} | 🎒${troop.space}</div>
+            </div>
+        `;
+    }
+    grid.innerHTML = html;
+    updateArmyCount();
+}
+
+function selectTroop(key) {
+    GameState.selectedTroop = key;
+    renderTroopGrid();
+}
+
+function trainSelected() {
+    const key = GameState.selectedTroop;
+    if (!key) { showToast('Selecciona una tropa primero'); return; }
+    const troop = TROOPS[key];
+    const currentSpace = getArmySpace();
+    if (currentSpace + troop.space > GameState.armyCap) {
+        showToast('❌ Ejército lleno');
+        return;
+    }
+    if (troop.costType === 'elixir' && GameState.elixir < troop.cost) {
+        showToast('❌ No tienes suficiente elixir');
+        return;
+    }
+    if (troop.costType === 'darkElixir' && GameState.darkElixir < troop.cost) {
+        showToast('❌ No tienes suficiente elixir oscuro');
+        return;
+    }
+
+    if (troop.costType === 'elixir') GameState.elixir -= troop.cost;
+    else GameState.darkElixir -= troop.cost;
+
+    GameState.army[key] = (GameState.army[key] || 0) + 1;
+    renderTroopGrid();
+    updateHUD();
+    showToast(`✅ ${troop.name} entrenado!`);
+}
+
+function getArmySpace() {
+    let space = 0;
+    for (const [key, count] of Object.entries(GameState.army)) {
+        space += (TROOPS[key]?.space || 1) * count;
+    }
+    return space;
+}
+
+function updateArmyCount() {
+    document.getElementById('armyCount').textContent = getArmySpace();
+    document.getElementById('armyCap').textContent = GameState.armyCap;
+}
+
+// --- BATTLE SYSTEM ---
+function startBattle(mode) {
+    const totalTroops = Object.values(GameState.army).reduce((a, b) => a + b, 0);
+    if (totalTroops === 0) {
+        showToast('❌ Entrena tropas primero');
+        return;
+    }
+
+    closeAllPanels();
+    GameState.battleActive = true;
+    GameState.battleTime = 180;
+    GameState.battleStars = 0;
+    GameState.battleLootGold = 0;
+    GameState.battleLootElixir = 0;
+
+    // Hide normal UI, show battle UI
+    document.getElementById('bottomBar').style.display = 'none';
+    document.getElementById('battleUI').classList.add('active');
+
+    // Generate enemy base
+    generateEnemyBase(mode);
+
+    // Move camera
+    cameraDist = 60;
+    cameraHeight = 45;
+    cameraTarget = { x: 0, y: 0, z: 0 };
+
+    // Render deploy bar
+    renderDeployBar();
+
+    updateBattleUI();
+}
+
+function generateEnemyBase(mode) {
+    // Clear previous enemy buildings
+    enemyBuildings.forEach(eb => scene.remove(eb.mesh));
+    enemyBuildings = [];
+
+    const difficulty = mode === 'war' ? 3 : mode === 'rival' ? 2 : 1;
+    const lootMultiplier = difficulty;
+
+    // Enemy Town Hall
+    const thMesh = createTownHallModel(difficulty * 2);
+    thMesh.position.set(0, 0, -30);
+    scene.add(thMesh);
+    enemyBuildings.push({
+        mesh: thMesh, type: 'townhall', hp: 1000 * difficulty,
+        maxHp: 1000 * difficulty, x: 0, z: -30,
+        lootGold: 1000 * lootMultiplier, lootElixir: 1000 * lootMultiplier
+    });
+
+    // Enemy defenses
+    const defTypes = ['cannon', 'archerTower', 'mortar', 'wizardTower'];
+    const numDef = 3 + difficulty * 2;
+    for (let i = 0; i < numDef; i++) {
+        const type = defTypes[i % defTypes.length];
+        const angle = (i / numDef) * Math.PI * 2;
+        const radius = 8 + Math.random() * 6;
+        const x = Math.cos(angle) * radius;
+        const z = -30 + Math.sin(angle) * radius;
+        const level = Math.ceil(difficulty * 1.5);
+
+        const mesh = createBuildingMesh(type, level);
+        mesh.position.set(x, 0, z);
+        scene.add(mesh);
+        enemyBuildings.push({
+            mesh, type, hp: BUILDINGS[type].hp * level * 0.5,
+            maxHp: BUILDINGS[type].hp * level * 0.5,
+            x, z,
+            dps: BUILDINGS[type].dps * (1 + (level - 1) * 0.15),
+            range: BUILDINGS[type].range,
+            lootGold: 200 * lootMultiplier,
+            lootElixir: 200 * lootMultiplier,
+            attackTimer: 0
+        });
+    }
+
+    // Resource buildings
+    const resTypes = ['goldMine', 'elixirCollector', 'goldStorage', 'elixirStorage'];
+    for (let i = 0; i < 4; i++) {
+        const type = resTypes[i];
+        const angle = (i / 4) * Math.PI * 2 + Math.PI / 8;
+        const x = Math.cos(angle) * 15;
+        const z = -30 + Math.sin(angle) * 15;
+
+        const mesh = createBuildingMesh(type, difficulty);
+        mesh.position.set(x, 0, z);
+        scene.add(mesh);
+        enemyBuildings.push({
+            mesh, type, hp: 300 * difficulty,
+            maxHp: 300 * difficulty,
+            x, z,
+            lootGold: type.includes('gold') ? 500 * lootMultiplier : 100,
+            lootElixir: type.includes('elixir') ? 500 * lootMultiplier : 100
+        });
+    }
+
+    // Walls
+    for (let i = 0; i < 20; i++) {
+        const angle = (i / 20) * Math.PI * 2;
+        const radius = 12;
+        const x = Math.cos(angle) * radius;
+        const z = -30 + Math.sin(angle) * radius;
+
+        const mesh = createBuildingMesh('wall', difficulty);
+        mesh.position.set(x, 0, z);
+        scene.add(mesh);
+        enemyBuildings.push({
+            mesh, type: 'wall', hp: 300 * difficulty,
+            maxHp: 300 * difficulty,
+            x, z, lootGold: 0, lootElixir: 0
+        });
+    }
+}
+
+function renderDeployBar() {
+    const bar = document.getElementById('deployBar');
+    let html = '';
+    for (const [key, count] of Object.entries(GameState.army)) {
+        if (count > 0) {
+            const troop = TROOPS[key];
+            html += `
+                <div class="deploy-btn ${GameState.deployTroop === key ? 'selected' : ''}" onclick="selectDeploy('${key}')">
+                    <span class="emoji">${troop.icon}</span>
+                    <span class="count">x${count}</span>
+                </div>
+            `;
+        }
+    }
+    html += `<button class="end-battle-btn" onclick="endBattle()">🏳️ Rendirse</button>`;
+    bar.innerHTML = html;
+}
+
+function selectDeploy(key) {
+    GameState.deployTroop = key;
+    renderDeployBar();
+}
+
+function deployTroop(worldX, worldZ) {
+    const key = GameState.deployTroop;
+    if (!key || !GameState.army[key] || GameState.army[key] <= 0) return;
+
+    const troop = TROOPS[key];
+    GameState.army[key]--;
+    if (GameState.army[key] <= 0) delete GameState.army[key];
+
+    // Create troop mesh
+    const troopGroup = new THREE.Group();
+    // Body
+    const body = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.3, 0.6, 4, 8),
+        new THREE.MeshStandardMaterial({ color: troop.color })
+    );
+    body.position.y = 0.6;
+    body.castShadow = true;
+    troopGroup.add(body);
+
+    // Head
+    const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.25, 8, 8),
+        new THREE.MeshStandardMaterial({ color: troop.type === 'air' ? troop.color : 0xFFCC80 })
+    );
+    head.position.y = 1.2;
+    troopGroup.add(head);
+
+    // Weapon glow for special troops
+    if (key === 'wizard' || key === 'dragon') {
+        const glow = new THREE.PointLight(troop.color, 0.5, 4);
+        glow.position.y = 1;
+        troopGroup.add(glow);
+    }
+
+    if (troop.type === 'air') {
+        troopGroup.position.set(worldX, 4, worldZ);
+        // Wings
+        for (let s = -1; s <= 1; s += 2) {
+            const wing = new THREE.Mesh(
+                new THREE.PlaneGeometry(0.8, 0.4),
+                new THREE.MeshStandardMaterial({ color: troop.color, side: THREE.DoubleSide, transparent: true, opacity: 0.8 })
+            );
+            wing.position.set(s * 0.5, 0.8, 0);
+            wing.rotation.z = s * 0.3;
+            troopGroup.add(wing);
+        }
+    } else {
+        troopGroup.position.set(worldX, 0, worldZ);
+    }
+
+    scene.add(troopGroup);
+    troopMeshes.push({
+        mesh: troopGroup,
+        key, hp: troop.hp, maxHp: troop.hp,
+        dps: troop.dps, speed: troop.speed,
+        range: troop.range || 1.5,
+        type: troop.type,
+        target: null,
+        attackTimer: 0
+    });
+
+    spawnParticles(worldX, 1, worldZ, troop.color, 10);
+    renderDeployBar();
+}
+
+function updateBattle(dt) {
+    if (!GameState.battleActive) return;
+
+    // Timer
+    GameState.battleTime -= dt;
+    if (GameState.battleTime <= 0) {
+        endBattle();
+        return;
+    }
+
+    // Update troops
+    for (let i = troopMeshes.length - 1; i >= 0; i--) {
+        const t = troopMeshes[i];
+        if (t.hp <= 0) {
+            spawnParticles(t.mesh.position.x, 1, t.mesh.position.z, 0xff0000, 12);
+            scene.remove(t.mesh);
+            troopMeshes.splice(i, 1);
+            continue;
+        }
+
+        // Find target
+        if (!t.target || t.target.hp <= 0) {
+            t.target = findClosestEnemy(t.mesh.position);
+        }
+
+        if (t.target) {
+            const dx = t.target.x - t.mesh.position.x;
+            const dz = t.target.z - t.mesh.position.z;
+            const dist = Math.sqrt(dx * dx + dz * dz);
+
+            if (dist > t.range) {
+                // Move toward target
+                const speed = t.speed * dt * 3;
+                t.mesh.position.x += (dx / dist) * speed;
+                t.mesh.position.z += (dz / dist) * speed;
+                t.mesh.lookAt(t.target.x, t.mesh.position.y, t.target.z);
+
+                // Bounce animation
+                t.mesh.position.y = (t.type === 'air' ? 4 : 0) + Math.abs(Math.sin(Date.now() * 0.005)) * 0.3;
+            } else {
+                // Attack
+                t.attackTimer += dt;
+                if (t.attackTimer >= 1) {
+                    t.attackTimer = 0;
+                    t.target.hp -= t.dps;
+
+                    // Projectile or effect
+                    if (t.range > 2) {
+                        shootProjectile(t.mesh.position, { x: t.target.x, y: 1, z: t.target.z }, t.key);
+                    } else {
+                        spawnParticles(t.target.x, 1, t.target.z, 0xff6600, 5);
+                    }
+
+                    if (t.target.hp <= 0) {
+                        // Destroy enemy building
+                        destroyEnemyBuilding(t.target);
+                        t.target = null;
+                    }
+                }
+            }
+        }
+    }
+
+    // Enemy defenses attack
+    enemyBuildings.forEach(eb => {
+        if (eb.hp <= 0 || !eb.dps || !eb.range) return;
+
+        eb.attackTimer = (eb.attackTimer || 0) + dt;
+        if (eb.attackTimer >= 1.5) {
+            eb.attackTimer = 0;
+
+            // Find closest troop
+            let closest = null, minDist = eb.range;
+            troopMeshes.forEach(t => {
+                const dist = Math.sqrt(
+                    (t.mesh.position.x - eb.x) ** 2 + (t.mesh.position.z - eb.z) ** 2
+                );
+                if (dist < minDist) { minDist = dist; closest = t; }
+            });
+
+            if (closest) {
+                closest.hp -= eb.dps;
+                shootProjectile(
+                    { x: eb.x, y: 3, z: eb.z },
+                    closest.mesh.position,
+                    'defense'
+                );
+            }
+        }
+    });
+
+    // Check stars
+    const totalBuildings = enemyBuildings.length;
+    const destroyed = enemyBuildings.filter(b => b.hp <= 0).length;
+    const thDestroyed = enemyBuildings.some(b => b.type === 'townhall' && b.hp <= 0);
+    const percent = destroyed / totalBuildings;
+
+    let stars = 0;
+    if (percent >= 0.5) stars = 1;
+    if (thDestroyed) stars = Math.max(stars, 2);
+    if (percent >= 1) stars = 3;
+    GameState.battleStars = stars;
+
+    // Check if all troops dead and none left to deploy
+    const troopsLeft = Object.values(GameState.army).reduce((a, b) => a + b, 0);
+    if (troopMeshes.length === 0 && troopsLeft === 0 && GameState.battleActive) {
+        setTimeout(() => endBattle(), 1000);
+    }
+
+    updateBattleUI();
+}
+
+function findClosestEnemy(pos) {
+    let closest = null, minDist = Infinity;
+    enemyBuildings.forEach(eb => {
+        if (eb.hp <= 0) return;
+        const dist = Math.sqrt((pos.x - eb.x) ** 2 + (pos.z - eb.z) ** 2);
+        if (dist < minDist) { minDist = dist; closest = eb; }
+    });
+    return closest;
+}
+
+function destroyEnemyBuilding(eb) {
+    GameState.battleLootGold += eb.lootGold || 0;
+    GameState.battleLootElixir += eb.lootElixir || 0;
+    spawnParticles(eb.x, 2, eb.z, 0xff4400, 25);
+    spawnParticles(eb.x, 1, eb.z, 0x888888, 15);
+
+    // Collapse animation
+    if (eb.mesh) {
+        const collapse = () => {
+            eb.mesh.scale.y *= 0.9;
+            eb.mesh.position.y -= 0.05;
+            if (eb.mesh.scale.y > 0.05) requestAnimationFrame(collapse);
+            else scene.remove(eb.mesh);
+        };
+        collapse();
+    }
+}
+
+function shootProjectile(from, to, type) {
+    const color = type === 'defense' ? 0xff0000 : type === 'wizard' ? 0x7c4dff : type === 'dragon' ? 0xff4400 : 0xffaa00;
+    const geo = new THREE.SphereGeometry(0.15, 6, 6);
+    const mat = new THREE.MeshBasicMaterial({ color });
+    const proj = new THREE.Mesh(geo, mat);
+    proj.position.copy(from);
+
+    const trail = new THREE.PointLight(color, 0.5, 3);
+    proj.add(trail);
+
+    scene.add(proj);
+    projectiles.push({
+        mesh: proj,
+        from: { ...from },
+        to: { x: to.x, y: to.y || 1, z: to.z },
+        progress: 0,
+        speed: 4
+    });
+}
+
+function updateProjectiles(dt) {
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const p = projectiles[i];
+        p.progress += dt * p.speed;
+
+        if (p.progress >= 1) {
+            spawnParticles(p.to.x, p.to.y, p.to.z, p.mesh.material.color.getHex(), 5);
+            scene.remove(p.mesh);
+            projectiles.splice(i, 1);
+            continue;
+        }
+
+        // Lerp with arc
+        const t = p.progress;
+        p.mesh.position.x = p.from.x + (p.to.x - p.from.x) * t;
+        p.mesh.position.z = p.from.z + (p.to.z - p.from.z) * t;
+        p.mesh.position.y = p.from.y + (p.to.y - p.from.y) * t + Math.sin(t * Math.PI) * 3;
+    }
+}
+
+function updateBattleUI() {
+    const mins = Math.floor(GameState.battleTime / 60);
+    const secs = Math.floor(GameState.battleTime % 60);
+    document.getElementById('battleTimer').textContent = `${mins}:${secs.toString().padStart(2, '0')}`;
+    document.getElementById('battleGoldLoot').textContent = GameState.battleLootGold;
+    document.getElementById('battleElixirLoot').textContent = GameState.battleLootElixir;
+
+    for (let i = 1; i <= 3; i++) {
+        document.getElementById(`star${i}`).className = `battle-star ${GameState.battleStars >= i ? 'earned' : ''}`;
+    }
+}
+
+function endBattle() {
+    GameState.battleActive = false;
+
+    // Clean up troops
+    troopMeshes.forEach(t => scene.remove(t.mesh));
+    troopMeshes = [];
+
+    // Clean up enemy
+    enemyBuildings.forEach(eb => { if (eb.mesh) scene.remove(eb.mesh); });
+    enemyBuildings = [];
+
+    // Award loot
+    GameState.gold += GameState.battleLootGold;
+    GameState.elixir += GameState.battleLootElixir;
+    GameState.trophies += GameState.battleStars * 10;
+
+    // Show result
+    const result = document.getElementById('battleResult');
+    document.getElementById('resultStars').textContent = '⭐'.repeat(GameState.battleStars) + '☆'.repeat(3 - GameState.battleStars);
+    document.getElementById('resultTitle').innerHTML = `<span class="${GameState.battleStars > 0 ? 'result-victory' : 'result-defeat'}">${GameState.battleStars > 0 ? '¡VICTORIA!' : 'DERROTA'}</span>`;
+    document.getElementById('resultLoot').innerHTML = `
+        <div class="result-loot-item"><div class="amount gold-text">${GameState.battleLootGold}</div><div class="label">Oro</div></div>
+        <div class="result-loot-item"><div class="amount elixir-text">${GameState.battleLootElixir}</div><div class="label">Elixir</div></div>
+        <div class="result-loot-item"><div class="amount trophy-text">+${GameState.battleStars * 10}</div><div class="label">Trofeos</div></div>
+    `;
+    result.classList.add('active');
+
+    document.getElementById('battleUI').classList.remove('active');
+    document.getElementById('bottomBar').style.display = 'flex';
+
+    addXP(50 * GameState.battleStars);
+    updateHUD();
+
+    // Reset camera
+    cameraDist = 50;
+    cameraHeight = 40;
+}
+
+function closeBattleResult() {
+    document.getElementById('battleResult').classList.remove('active');
+}
+
+// --- PARTICLES ---
+function spawnParticles(x, y, z, color, count) {
+    for (let i = 0; i < count; i++) {
+        const geo = new THREE.SphereGeometry(0.08 + Math.random() * 0.12, 4, 4);
+        const mat = new THREE.MeshBasicMaterial({ color });
+        const p = new THREE.Mesh(geo, mat);
+        p.position.set(x, y, z);
+        p.userData = {
+            vx: (Math.random() - 0.5) * 4,
+            vy: Math.random() * 5 + 2,
+            vz: (Math.random() - 0.5) * 4,
+            life: 1
+        };
+        scene.add(p);
+        particles.push(p);
+    }
+}
+
+function updateParticles(dt) {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.userData.vy -= 9.8 * dt;
+        p.position.x += p.userData.vx * dt;
+        p.position.y += p.userData.vy * dt;
+        p.position.z += p.userData.vz * dt;
+        p.userData.life -= dt * 1.5;
+
+        if (p.userData.life <= 0 || p.position.y < -1) {
+            scene.remove(p);
+            particles.splice(i, 1);
+        } else {
+            p.material.opacity = p.userData.life;
+            p.material.transparent = true;
+            p.scale.setScalar(p.userData.life);
+        }
+    }
+}
+
+// --- SHOP ---
+function buyShop(item) {
+    switch(item) {
+        case 'gold1':
+            if (GameState.gems < 50) { showToast('❌ Gemas insuficientes'); return; }
+            GameState.gems -= 50; GameState.gold += 5000;
+            showToast('💰 +5,000 Oro'); break;
+        case 'elixir1':
+            if (GameState.gems < 50) { showToast('❌ Gemas insuficientes'); return; }
+            GameState.gems -= 50; GameState.elixir += 5000;
+            showToast('🧪 +5,000 Elixir'); break;
+        case 'gold2':
+            if (GameState.gems < 200) { showToast('❌ Gemas insuficientes'); return; }
+            GameState.gems -= 200; GameState.gold += 25000;
+            showToast('👑 +25,000 Oro'); break;
+        case 'elixir2':
+            if (GameState.gems < 200) { showToast('❌ Gemas insuficientes'); return; }
+            GameState.gems -= 200; GameState.elixir += 25000;
+            showToast('⚗️ +25,000 Elixir'); break;
+        case 'shield':
+            if (GameState.gems < 100) { showToast('❌ Gemas insuficientes'); return; }
+            GameState.gems -= 100; GameState.shieldTime = Date.now() + 12 * 60 * 60 * 1000;
+            showToast('🛡️ Escudo activado 12h'); break;
+        case 'builder':
+            if (GameState.gems < 500) { showToast('❌ Gemas insuficientes'); return; }
+            GameState.gems -= 500; GameState.builders++;
+            showToast(`👷 Ahora tienes ${GameState.builders} constructores`); break;
+    }
+    updateHUD();
+}
+
+function toggleShield() {
+    if (GameState.shieldTime > Date.now()) {
+        const remaining = Math.floor((GameState.shieldTime - Date.now()) / 60000);
+        showToast(`🛡️ Escudo activo: ${remaining} minutos restantes`);
+    } else {
+        showToast('🛡️ Sin escudo activo. Compra uno en la tienda.');
+    }
+}
+
+// --- XP & LEVELING ---
+function addXP(amount) {
+    GameState.xp += amount;
+    while (GameState.xp >= GameState.xpNeeded) {
+        GameState.xp -= GameState.xpNeeded;
+        GameState.level++;
+        GameState.xpNeeded = Math.floor(100 * Math.pow(1.5, GameState.level - 1));
+        showToast(`🎉 ¡Nivel ${GameState.level}! Nuevos edificios desbloqueados`);
+        GameState.gems += 20; // Level up reward
+    }
+    updateHUD();
+}
+
+// --- RESOURCE PRODUCTION ---
+function updateProduction(dt) {
+    GameState.productionTimer += dt;
+    if (GameState.productionTimer >= 1) {
+        GameState.productionTimer = 0;
+        GameState.buildings.forEach(b => {
+            const def = BUILDINGS[b.type];
+            if (!def || !def.production) return;
+            const rate = def.production * (1 + (b.level - 1) * 0.2) / 3600; // per second
+            if (def.prodType === 'gold') GameState.gold += rate;
+            else if (def.prodType === 'elixir') GameState.elixir += rate;
+            else if (def.prodType === 'darkElixir') GameState.darkElixir += rate;
+        });
+    }
+}
+
+// --- UPGRADE TIMER ---
+function updateUpgrades(dt) {
+    GameState.buildings.forEach((b, i) => {
+        if (b.upgrading && Date.now() >= b.upgradeEnd) {
+            b.upgrading = false;
+            b.level++;
+            const def = b.type === 'townhall' ? { hp: 1500 } : BUILDINGS[b.type];
+            b.maxHp = Math.floor((def.hp || 500) * (1 + (b.level - 1) * 0.3));
+            b.hp = b.maxHp;
+            GameState.buildersUsed = Math.max(0, GameState.buildersUsed - 1);
+
+            // Update mesh
+            if (buildingMeshes[i]) {
+                const pos = buildingMeshes[i].position.clone();
+                scene.remove(buildingMeshes[i]);
+                const newMesh = b.type === 'townhall' ? createTownHallModel(b.level) : createBuildingMesh(b.type, b.level);
+                newMesh.position.copy(pos);
+                newMesh.userData = { buildingIndex: i };
+                scene.add(newMesh);
+                buildingMeshes[i] = newMesh;
+                spawnParticles(pos.x, 3, pos.z, 0xffd700, 25);
+            }
+
+            recalcArmyCap();
+            showToast(`⬆️ ¡Mejora completada! Nivel ${b.level}`);
+        }
+    });
+}
+
+// --- DAY/NIGHT CYCLE ---
+function updateDayNight(dt) {
+    GameState.dayTime += dt * 0.02;
+    const t = (Math.sin(GameState.dayTime) + 1) / 2; // 0 = night, 1 = day
+
+    // Sky color
+    const skyColor = new THREE.Color().lerpColors(
+        new THREE.Color(0x0a0a2e),
+        new THREE.Color(0x87CEEB),
+        t
+    );
+    scene.fog.color = skyColor;
+
+    // Light intensity
+    dirLight.intensity = 0.3 + t * 0.9;
+    ambientLight.intensity = 0.15 + t * 0.45;
+
+    // Light color
+    dirLight.color.lerpColors(
+        new THREE.Color(0x4466aa),
+        new THREE.Color(0xffeedd),
+        t
+    );
+
+    // Sun position
+    const sunAngle = GameState.dayTime;
+    dirLight.position.set(
+        Math.cos(sunAngle) * 40,
+        20 + Math.sin(sunAngle) * 30,
+        Math.sin(sunAngle) * 40
+    );
+
+    // Time indicator
+    const indicator = document.getElementById('timeIndicator');
+    if (t > 0.6) indicator.textContent = '☀️ Día';
+    else if (t > 0.3) indicator.textContent = '🌅 Atardecer';
+    else indicator.textContent = '🌙 Noche';
+}
+
+// --- UI FUNCTIONS ---
+function updateHUD() {
+    document.getElementById('goldDisplay').textContent = formatNumber(Math.floor(GameState.gold));
+    document.getElementById('elixirDisplay').textContent = formatNumber(Math.floor(GameState.elixir));
+    document.getElementById('darkElixirDisplay').textContent = formatNumber(Math.floor(GameState.darkElixir));
+    document.getElementById('gemsDisplay').textContent = formatNumber(GameState.gems);
+    document.getElementById('trophyDisplay').textContent = formatNumber(GameState.trophies);
+    document.getElementById('levelBadge').textContent = `Nv ${GameState.level}`;
+    document.getElementById('xpDisplay').textContent = `${GameState.xp}/${GameState.xpNeeded} XP`;
+}
+
+function formatNumber(n) {
+    if (n >= 1000000) return (n / 1000000).toFixed(1) + 'M';
+    if (n >= 1000) return (n / 1000).toFixed(1) + 'K';
+    return n.toString();
+}
+
+function openPanel(name) {
+    closeAllPanels();
+    document.getElementById('overlay').classList.add('active');
+    const panel = document.getElementById(name + 'Panel');
+    if (panel) {
+        panel.classList.add('active');
+        if (name === 'build') selectBuildCat('defense');
+        if (name === 'army') renderTroopGrid();
+    }
+}
+
+function closeAllPanels() {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('overlay').classList.remove('active');
+}
+
+function selectBuildCat(cat, el) {
+    document.querySelectorAll('.build-cat').forEach(c => c.classList.remove('active'));
+    if (el) el.classList.add('active');
+    else document.querySelector(`.build-cat:first-child`)?.classList.add('active');
+
+    const grid = document.getElementById('buildGrid');
+    let html = '';
+    for (const [key, b] of Object.entries(BUILDINGS)) {
+        if (b.cat !== cat) continue;
+        const costIcon = b.costType === 'gold' ? '💰' : b.costType === 'elixir' ? '🧪' : '🛢️';
+        html += `
+            <div class="build-item" onclick="placeBuilding('${key}')">
+                <div class="build-item-icon">${b.icon}</div>
+                <div class="build-item-name">${b.name}</div>
+                <div class="build-item-cost" style="color: ${b.costType === 'gold' ? '#ffd700' : b.costType === 'elixir' ? '#e040fb' : '#9e9e9e'}">${costIcon} ${b.cost}</div>
+                <div class="build-item-desc">${b.desc}</div>
+            </div>
+        `;
+    }
+    grid.innerHTML = html;
+}
+
+function showToast(msg) {
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    toast.textContent = msg;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3000);
+}
+
+// --- CAMERA ---
+function updateCamera() {
+    camera.position.x = cameraTarget.x + Math.cos(cameraAngle) * cameraDist;
+    camera.position.y = cameraHeight;
+    camera.position.z = cameraTarget.z + Math.sin(cameraAngle) * cameraDist;
+    camera.lookAt(cameraTarget.x, 0, cameraTarget.z);
+}
+
+// --- EVENTS ---
+function setupEvents() {
+    const canvas = renderer.domElement;
+
+    canvas.addEventListener('mousedown', (e) => {
+        isDragging = false;
+        lastMouse = { x: e.clientX, y: e.clientY };
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+        const dx = e.clientX - lastMouse.x;
+        const dy = e.clientY - lastMouse.y;
+
+        if (e.buttons === 1) {
+            if (Math.abs(dx) + Math.abs(dy) > 3) isDragging = true;
+
+            if (GameState.placingBuilding && GameState.placementGhost) {
+                // Move ghost
+                mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const pt = new THREE.Vector3();
+                raycaster.ray.intersectPlane(plane, pt);
+                if (pt) {
+                    const grid = worldToGrid(pt.x, pt.z);
+                    const def = BUILDINGS[GameState.placingBuilding];
+                    const worldPos = gridToWorld(grid.gx, grid.gz);
+                    const offset = (def.size * cellSize) / 2;
+                    GameState.placementGhost.position.set(worldPos.x + offset, 0, worldPos.z + offset);
+                }
+            } else {
+                // Pan camera
+                cameraAngle -= dx * 0.005;
+                cameraHeight = Math.max(10, Math.min(80, cameraHeight - dy * 0.2));
+            }
+        } else if (e.buttons === 2) {
+            // Right click pan
+            const forward = new THREE.Vector3(-Math.sin(cameraAngle), 0, Math.cos(cameraAngle));
+            const right = new THREE.Vector3(Math.cos(cameraAngle), 0, Math.sin(cameraAngle));
+            cameraTarget.x += (right.x * dx - forward.x * dy) * 0.1;
+            cameraTarget.z += (right.z * dx - forward.z * dy) * 0.1;
+        }
+
+        lastMouse = { x: e.clientX, y: e.clientY };
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+        if (isDragging) return;
+
+        mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+        mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+        raycaster.setFromCamera(mouse, camera);
+
+        if (GameState.battleActive && GameState.deployTroop) {
+            // Deploy troop at click position
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const pt = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, pt);
+            if (pt) deployTroop(pt.x, pt.z);
+            return;
+        }
+
+        if (GameState.placingBuilding) {
+            // Move ghost to click
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const pt = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, pt);
+            if (pt && GameState.placementGhost) {
+                const grid = worldToGrid(pt.x, pt.z);
+                const def = BUILDINGS[GameState.placingBuilding];
+                const worldPos = gridToWorld(grid.gx, grid.gz);
+                const offset = (def.size * cellSize) / 2;
+                GameState.placementGhost.position.set(worldPos.x + offset, 0, worldPos.z + offset);
+            }
+            return;
+        }
+
+        // Check if clicked on a building
+        const intersects = raycaster.intersectObjects(buildingMeshes, true);
+        if (intersects.length > 0) {
+            let obj = intersects[0].object;
+            while (obj.parent && !obj.userData.buildingIndex && obj.userData.buildingIndex !== 0) {
+                obj = obj.parent;
+            }
+            if (obj.userData.buildingIndex !== undefined) {
+                selectBuilding(obj.userData.buildingIndex);
+            }
+        }
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+        cameraDist = Math.max(15, Math.min(100, cameraDist + e.deltaY * 0.05));
+    });
+
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // Touch
+    canvas.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+            lastMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+            isDragging = false;
+        } else if (e.touches.length === 2) {
+            pinchDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+        }
+    });
+
+    canvas.addEventListener('touchmove', (e) => {
+        e.preventDefault();
+        if (e.touches.length === 1) {
+            const dx = e.touches[0].clientX - lastMouse.x;
+            const dy = e.touches[0].clientY - lastMouse.y;
+            if (Math.abs(dx) + Math.abs(dy) > 3) isDragging = true;
+
+            if (GameState.placingBuilding && GameState.placementGhost) {
+                mouse.x = (e.touches[0].clientX / window.innerWidth) * 2 - 1;
+                mouse.y = -(e.touches[0].clientY / window.innerHeight) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const pt = new THREE.Vector3();
+                raycaster.ray.intersectPlane(plane, pt);
+                if (pt) {
+                    const grid = worldToGrid(pt.x, pt.z);
+                    const def = BUILDINGS[GameState.placingBuilding];
+                    const worldPos = gridToWorld(grid.gx, grid.gz);
+                    const offset = (def.size * cellSize) / 2;
+                    GameState.placementGhost.position.set(worldPos.x + offset, 0, worldPos.z + offset);
+                }
+            } else {
+                cameraAngle -= dx * 0.005;
+                cameraHeight = Math.max(10, Math.min(80, cameraHeight - dy * 0.15));
+            }
+            lastMouse = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        } else if (e.touches.length === 2) {
+            const newDist = Math.hypot(
+                e.touches[0].clientX - e.touches[1].clientX,
+                e.touches[0].clientY - e.touches[1].clientY
+            );
+            cameraDist = Math.max(15, Math.min(100, cameraDist - (newDist - pinchDist) * 0.1));
+            pinchDist = newDist;
+        }
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+        if (!isDragging && e.changedTouches.length === 1) {
+            const touch = e.changedTouches[0];
+            mouse.x = (touch.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(touch.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+
+            if (GameState.battleActive && GameState.deployTroop) {
+                const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+                const pt = new THREE.Vector3();
+                raycaster.ray.intersectPlane(plane, pt);
+                if (pt) deployTroop(pt.x, pt.z);
+                return;
+            }
+
+            const intersects = raycaster.intersectObjects(buildingMeshes, true);
+            if (intersects.length > 0) {
+                let obj = intersects[0].object;
+                while (obj.parent && !obj.userData.buildingIndex && obj.userData.buildingIndex !== 0) {
+                    obj = obj.parent;
+                }
+                if (obj.userData.buildingIndex !== undefined) {
+                    selectBuilding(obj.userData.buildingIndex);
+                }
+            }
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+}
+
+// --- SAVE/LOAD ---
+function saveGame() {
+    const saveData = {
+        gold: GameState.gold,
+        elixir: GameState.elixir,
+        darkElixir: GameState.darkElixir,
+        gems: GameState.gems,
+        trophies: GameState.trophies,
+        level: GameState.level,
+        xp: GameState.xp,
+        xpNeeded: GameState.xpNeeded,
+        townHallLevel: GameState.townHallLevel,
+        builders: GameState.builders,
+        army: GameState.army,
+        buildings: GameState.buildings.map(b => ({
+            type: b.type, gx: b.gx, gz: b.gz,
+            level: b.level, hp: b.hp, maxHp: b.maxHp
+        })),
+        savedAt: Date.now()
+    };
+    localStorage.setItem('realmOfClans', JSON.stringify(saveData));
+    showToast('💾 Partida guardada!');
+}
+
+function loadGame() {
+    const data = localStorage.getItem('realmOfClans');
+    if (!data) return;
+
+    try {
+        const save = JSON.parse(data);
+        GameState.gold = save.gold || 5000;
+        GameState.elixir = save.elixir || 5000;
+        GameState.darkElixir = save.darkElixir || 0;
+        GameState.gems = save.gems || 250;
+        GameState.trophies = save.trophies || 0;
+        GameState.level = save.level || 1;
+        GameState.xp = save.xp || 0;
+        GameState.xpNeeded = save.xpNeeded || 100;
+        GameState.townHallLevel = save.townHallLevel || 1;
+        GameState.builders = save.builders || 2;
+        GameState.army = save.army || {};
+
+        // Rebuild saved buildings
+        if (save.buildings && save.buildings.length > 0) {
+            // Remove default buildings
+            buildingMeshes.forEach(m => scene.remove(m));
+            buildingMeshes = [];
+            GameState.buildings = [];
+
+            save.buildings.forEach(b => {
+                GameState.buildings.push({
+                    type: b.type, gx: b.gx, gz: b.gz,
+                    level: b.level, hp: b.hp, maxHp: b.maxHp
+                });
+
+                const mesh = b.type === 'townhall' ? createTownHallModel(b.level) : createBuildingMesh(b.type, b.level);
+                const def = b.type === 'townhall' ? { size: 3 } : BUILDINGS[b.type];
+                const worldPos = gridToWorld(b.gx, b.gz);
+                const offset = ((def?.size || 2) * cellSize) / 2;
+                mesh.position.set(worldPos.x + offset, 0, worldPos.z + offset);
+                mesh.userData = { buildingIndex: GameState.buildings.length - 1 };
+                scene.add(mesh);
+                buildingMeshes.push(mesh);
+            });
+        }
+
+        // Offline production
+        if (save.savedAt) {
+            const elapsed = (Date.now() - save.savedAt) / 1000; // seconds
+            GameState.buildings.forEach(b => {
+                const def = BUILDINGS[b.type];
+                if (!def || !def.production) return;
+                const rate = def.production * (1 + (b.level - 1) * 0.2) / 3600;
+                const produced = rate * elapsed;
+                if (def.prodType === 'gold') GameState.gold += produced;
+                else if (def.prodType === 'elixir') GameState.elixir += produced;
+                else if (def.prodType === 'darkElixir') GameState.darkElixir += produced;
+            });
+            if (elapsed > 60) {
+                showToast(`⏰ Recursos offline recolectados (${Math.floor(elapsed / 60)} min)`);
+            }
+        }
+
+        recalcArmyCap();
+        updateHUD();
+    } catch(e) {
+        console.error('Error loading save:', e);
+    }
+}
+
+// --- ANIMATE BUILDINGS ---
+function animateBuildings(time) {
+    buildingMeshes.forEach((mesh, i) => {
+        if (!mesh) return;
+        const b = GameState.buildings[i];
+        if (!b) return;
+
+        // Upgrading animation
+        if (b.upgrading) {
+            mesh.rotation.y += 0.01;
+            const scale = 1 + Math.sin(time * 3) * 0.05;
+            mesh.scale.setScalar(scale * (1 + (b.level - 1) * 0.05));
+        }
+
+        // Animate specific building types
+        mesh.traverse(child => {
+            // Rotate wheels on gold mines
+            if (child.geometry?.type === 'TorusGeometry' && b.type === 'goldMine') {
+                child.rotation.z += 0.02;
+            }
+            // Float bubbles in lab
+            if (child.userData.floatSpeed) {
+                child.position.y += Math.sin(time * child.userData.floatSpeed + child.userData.floatOffset) * 0.005;
+            }
+        });
+    });
+}
+
+// ============================================
+// SPELLS SYSTEM
+// ============================================
+const SPELLS = {
+    lightning: { name: 'Rayo', icon: '⚡', cost: 200, costType: 'elixir', damage: 300, radius: 4, desc: 'Golpea con un rayo devastador', color: 0xffff00 },
+    heal: { name: 'Curación', icon: '💚', cost: 300, costType: 'elixir', heal: 150, radius: 5, duration: 8, desc: 'Cura tropas en el área', color: 0x4caf50 },
+    rage: { name: 'Furia', icon: '🔴', cost: 250, costType: 'elixir', speedBoost: 1.5, dpsBoost: 1.5, radius: 5, duration: 10, desc: 'Aumenta velocidad y daño', color: 0xff0000 },
+    freeze: { name: 'Congelación', icon: '❄️', cost: 350, costType: 'elixir', radius: 4, duration: 6, desc: 'Congela defensas enemigas', color: 0x00bcd4 },
+    earthquake: { name: 'Terremoto', icon: '🌋', cost: 400, costType: 'darkElixir', damagePercent: 14, radius: 5, desc: '14% daño a edificios', color: 0x8B4513 },
+    poison: { name: 'Veneno', icon: '☠️', cost: 200, costType: 'darkElixir', dps: 15, radius: 4, duration: 12, desc: 'Daño continuo y ralentiza', color: 0x9C27B0 },
+    haste: { name: 'Prisa', icon: '💨', cost: 150, costType: 'darkElixir', speedBoost: 2, radius: 4, duration: 8, desc: 'Velocidad extrema', color: 0xFF9800 },
+    clone: { name: 'Clon', icon: '👥', cost: 500, costType: 'elixir', radius: 3, clones: 3, desc: 'Clona tropas en el área', color: 0x2196F3 },
+    invisibility: { name: 'Invisibilidad', icon: '👻', cost: 300, costType: 'darkElixir', radius: 4, duration: 5, desc: 'Tropas invisibles temporalmente', color: 0xEEEEEE }
+};
+
+GameState.spells = {};
+GameState.spellCap = 5;
+GameState.selectedSpell = null;
+GameState.activeSpellEffects = [];
+GameState.deploySpell = null;
+
+function renderSpellGrid() {
+    const grid = document.getElementById('spellGrid');
+    let html = '';
+    for (const [key, spell] of Object.entries(SPELLS)) {
+        const count = GameState.spells[key] || 0;
+        html += `
+            <div class="spell-item ${GameState.selectedSpell === key ? 'selected' : ''}" onclick="selectSpell('${key}')">
+                ${count > 0 ? `<div class="spell-count">${count}</div>` : ''}
+                <div class="spell-emoji">${spell.icon}</div>
+                <div class="spell-name">${spell.name}</div>
+                <div class="spell-desc">${spell.desc}</div>
+                <div class="spell-cost">${spell.cost} ${spell.costType === 'elixir' ? '🧪' : '🛢️'}</div>
+            </div>
+        `;
+    }
+    grid.innerHTML = html;
+    const totalSpells = Object.values(GameState.spells).reduce((a, b) => a + b, 0);
+    document.getElementById('spellCount').textContent = totalSpells;
+}
+
+function selectSpell(key) {
+    GameState.selectedSpell = key;
+    renderSpellGrid();
+}
+
+function brewSelected() {
+    const key = GameState.selectedSpell;
+    if (!key) { showToast('Selecciona un hechizo'); return; }
+    const spell = SPELLS[key];
+    const total = Object.values(GameState.spells).reduce((a, b) => a + b, 0);
+    if (total >= GameState.spellCap) { showToast('❌ Capacidad de hechizos llena'); return; }
+    if (spell.costType === 'elixir' && GameState.elixir < spell.cost) { showToast('❌ Elixir insuficiente'); return; }
+    if (spell.costType === 'darkElixir' && GameState.darkElixir < spell.cost) { showToast('❌ Elixir oscuro insuficiente'); return; }
+
+    if (spell.costType === 'elixir') GameState.elixir -= spell.cost;
+    else GameState.darkElixir -= spell.cost;
+
+    GameState.spells[key] = (GameState.spells[key] || 0) + 1;
+    renderSpellGrid();
+    updateHUD();
+    showToast(`✨ ${spell.name} preparado!`);
+}
+
+function castSpell(worldX, worldZ) {
+    const key = GameState.deploySpell;
+    if (!key || !GameState.spells[key]) return;
+
+    const spell = SPELLS[key];
+    GameState.spells[key]--;
+    if (GameState.spells[key] <= 0) delete GameState.spells[key];
+
+    // Visual effect
+    createSpellEffect(worldX, worldZ, spell, key);
+
+    // Apply effect
+    switch(key) {
+        case 'lightning':
+            // Damage enemy buildings in radius
+            enemyBuildings.forEach(eb => {
+                if (eb.hp <= 0) return;
+                const dist = Math.sqrt((eb.x - worldX) ** 2 + (eb.z - worldZ) ** 2);
+                if (dist < spell.radius) {
+                    eb.hp -= spell.damage;
+                    if (eb.hp <= 0) destroyEnemyBuilding(eb);
+                }
+            });
+            spawnParticles(worldX, 5, worldZ, 0xffff00, 30);
+            playSound('lightning');
+            break;
+
+        case 'heal':
+            GameState.activeSpellEffects.push({
+                type: 'heal', x: worldX, z: worldZ, radius: spell.radius,
+                heal: spell.heal / spell.duration, remaining: spell.duration, timer: 0
+            });
+            break;
+
+        case 'rage':
+            GameState.activeSpellEffects.push({
+                type: 'rage', x: worldX, z: worldZ, radius: spell.radius,
+                speedBoost: spell.speedBoost, dpsBoost: spell.dpsBoost, remaining: spell.duration, timer: 0
+            });
+            break;
+
+        case 'freeze':
+            GameState.activeSpellEffects.push({
+                type: 'freeze', x: worldX, z: worldZ, radius: spell.radius,
+                remaining: spell.duration, timer: 0
+            });
+            // Mark frozen defenses
+            enemyBuildings.forEach(eb => {
+                const dist = Math.sqrt((eb.x - worldX) ** 2 + (eb.z - worldZ) ** 2);
+                if (dist < spell.radius) eb.frozen = spell.duration;
+            });
+            break;
+
+        case 'earthquake':
+            enemyBuildings.forEach(eb => {
+                if (eb.hp <= 0) return;
+                const dist = Math.sqrt((eb.x - worldX) ** 2 + (eb.z - worldZ) ** 2);
+                if (dist < spell.radius) {
+                    eb.hp -= eb.maxHp * (spell.damagePercent / 100);
+                    if (eb.hp <= 0) destroyEnemyBuilding(eb);
+                }
+            });
+            spawnParticles(worldX, 1, worldZ, 0x8B4513, 25);
+            break;
+
+        case 'poison':
+            GameState.activeSpellEffects.push({
+                type: 'poison', x: worldX, z: worldZ, radius: spell.radius,
+                dps: spell.dps, remaining: spell.duration, timer: 0
+            });
+            break;
+
+        case 'haste':
+            GameState.activeSpellEffects.push({
+                type: 'haste', x: worldX, z: worldZ, radius: spell.radius,
+                speedBoost: spell.speedBoost, remaining: spell.duration, timer: 0
+            });
+            break;
+
+        case 'clone':
+            // Clone nearby troops
+            let cloned = 0;
+            const cloneTargets = [...troopMeshes];
+            cloneTargets.forEach(t => {
+                if (cloned >= spell.clones) return;
+                const dist = Math.sqrt((t.mesh.position.x - worldX) ** 2 + (t.mesh.position.z - worldZ) ** 2);
+                if (dist < spell.radius) {
+                    const troop = TROOPS[t.key];
+                    const clone = new THREE.Group();
+                    const body = new THREE.Mesh(
+                        new THREE.CapsuleGeometry(0.3, 0.6, 4, 8),
+                        new THREE.MeshStandardMaterial({ color: troop.color, transparent: true, opacity: 0.7 })
+                    );
+                    body.position.y = 0.6; clone.add(body);
+                    const head = new THREE.Mesh(
+                        new THREE.SphereGeometry(0.25, 8, 8),
+                        new THREE.MeshStandardMaterial({ color: 0xFFCC80, transparent: true, opacity: 0.7 })
+                    );
+                    head.position.y = 1.2; clone.add(head);
+                    clone.position.copy(t.mesh.position);
+                    clone.position.x += (Math.random() - 0.5) * 3;
+                    clone.position.z += (Math.random() - 0.5) * 3;
+                    scene.add(clone);
+                    troopMeshes.push({
+                        mesh: clone, key: t.key, hp: troop.hp * 0.5, maxHp: troop.hp * 0.5,
+                        dps: troop.dps * 0.5, speed: troop.speed, range: troop.range || 1.5,
+                        type: troop.type, target: null, attackTimer: 0
+                    });
+                    cloned++;
+                }
+            });
+            spawnParticles(worldX, 2, worldZ, 0x2196F3, 20);
+            break;
+
+        case 'invisibility':
+            GameState.activeSpellEffects.push({
+                type: 'invisibility', x: worldX, z: worldZ, radius: spell.radius,
+                remaining: spell.duration, timer: 0
+            });
+            break;
+    }
+
+    renderDeployBar();
+    showToast(`✨ ${spell.name}!`);
+}
+
+function createSpellEffect(x, z, spell, type) {
+    // Ring effect
+    const ringGeo = new THREE.RingGeometry(0.5, spell.radius, 32);
+    const ringMat = new THREE.MeshBasicMaterial({
+        color: spell.color, transparent: true, opacity: 0.4, side: THREE.DoubleSide
+    });
+    const ring = new THREE.Mesh(ringGeo, ringMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(x, 0.1, z);
+    scene.add(ring);
+
+    // Pillar for lightning
+    if (type === 'lightning') {
+        const pillar = new THREE.Mesh(
+            new THREE.CylinderGeometry(0.2, 0.5, 30, 6),
+            new THREE.MeshBasicMaterial({ color: 0xffff00, transparent: true, opacity: 0.8 })
+        );
+        pillar.position.set(x, 15, z);
+        scene.add(pillar);
+        setTimeout(() => scene.remove(pillar), 500);
+    }
+
+    // Duration-based removal
+    const dur = spell.duration || 2;
+    let elapsed = 0;
+    const fadeEffect = () => {
+        elapsed += 0.016;
+        ringMat.opacity = 0.4 * (1 - elapsed / dur);
+        if (elapsed < dur) requestAnimationFrame(fadeEffect);
+        else scene.remove(ring);
+    };
+    fadeEffect();
+}
+
+function updateSpellEffects(dt) {
+    for (let i = GameState.activeSpellEffects.length - 1; i >= 0; i--) {
+        const eff = GameState.activeSpellEffects[i];
+        eff.remaining -= dt;
+        eff.timer += dt;
+
+        if (eff.remaining <= 0) {
+            GameState.activeSpellEffects.splice(i, 1);
+            continue;
+        }
+
+        // Apply per-tick effects
+        troopMeshes.forEach(t => {
+            const dist = Math.sqrt((t.mesh.position.x - eff.x) ** 2 + (t.mesh.position.z - eff.z) ** 2);
+            if (dist > eff.radius) return;
+
+            if (eff.type === 'heal' && eff.timer >= 1) {
+                t.hp = Math.min(t.maxHp, t.hp + eff.heal);
+            }
+            if (eff.type === 'rage') {
+                t._raged = true;
+            }
+            if (eff.type === 'haste') {
+                t._hasted = true;
+            }
+            if (eff.type === 'invisibility') {
+                t._invisible = true;
+                t.mesh.traverse(c => { if (c.material) { c.material.transparent = true; c.material.opacity = 0.3; } });
+            }
+        });
+
+        if (eff.timer >= 1) eff.timer = 0;
+
+        // Frozen defenses
+        if (eff.type === 'freeze') {
+            enemyBuildings.forEach(eb => {
+                if (eb.frozen && eb.frozen > 0) eb.frozen -= dt;
+            });
+        }
+    }
+}
+
+// ============================================
+// HEROES SYSTEM
+// ============================================
+const HEROES = {
+    barbarianKing: {
+        name: 'Rey Bárbaro', icon: '👑🗡️', hp: 1500, dps: 120, speed: 1,
+        cost: 5000, costType: 'darkElixir', ability: 'Furia de Hierro',
+        abilityDesc: 'Invoca 10 bárbaros y se cura un 30%',
+        color: 0xFFD700, unlockLevel: 5, type: 'ground'
+    },
+    archerQueen: {
+        name: 'Reina Arquera', icon: '👸🏹', hp: 1200, dps: 150, speed: 0.9,
+        cost: 10000, costType: 'darkElixir', ability: 'Capa Real',
+        abilityDesc: 'Se vuelve invisible y aumenta su velocidad',
+        color: 0xE040FB, unlockLevel: 8, range: 6, type: 'ground'
+    },
+    grandWarden: {
+        name: 'Gran Centinela', icon: '🧙‍♂️✨', hp: 1000, dps: 80, speed: 0.7,
+        cost: 15000, costType: 'elixir', ability: 'Tomo Eterno',
+        abilityDesc: 'Hace invulnerables a todas las tropas por 4s',
+        color: 0x4FC3F7, unlockLevel: 10, range: 5, type: 'air'
+    },
+    royalChampion: {
+        name: 'Campeona Real', icon: '⚔️👑', hp: 1800, dps: 200, speed: 1.2,
+        cost: 20000, costType: 'darkElixir', ability: 'Escudo Buscador',
+        abilityDesc: 'Lanza su escudo que rebota entre 4 edificios',
+        color: 0xFF5722, unlockLevel: 13, type: 'ground'
+    }
+};
+
+GameState.heroes = {};
+GameState.heroDeployed = {};
+
+function renderHeroesPanel() {
+    const body = document.getElementById('heroesPanelBody');
+    let html = '';
+    for (const [key, hero] of Object.entries(HEROES)) {
+        const owned = GameState.heroes[key];
+        const level = owned ? owned.level : 0;
+        const unlocked = GameState.level >= hero.unlockLevel;
+        const deployed = GameState.heroDeployed[key];
+
+        html += `
+            <div class="hero-card ${!unlocked ? 'locked' : ''}">
+                <div class="hero-emoji">${hero.icon}</div>
+                <div class="hero-info">
+                    <h3>${hero.name} ${level > 0 ? `(Nv ${level})` : ''}</h3>
+                    <div class="hero-level">${!unlocked ? `Desbloquea en Nv ${hero.unlockLevel}` : level === 0 ? 'No invocado' : 'Disponible'}</div>
+                    <div class="hero-stats">❤️${Math.floor(hero.hp * (1 + level * 0.1))} ⚔️${Math.floor(hero.dps * (1 + level * 0.1))} 🏃${hero.speed}</div>
+                    <div class="hero-ability">✨ ${hero.ability}: ${hero.abilityDesc}</div>
+                </div>
+                ${unlocked && !owned ? `<button class="hero-btn hero-btn-summon" onclick="summonHero('${key}')">Invocar (${hero.cost} ${hero.costType === 'darkElixir' ? '🛢️' : '🧪'})</button>` : ''}
+                ${owned && !deployed ? `<button class="hero-btn hero-btn-upgrade" onclick="upgradeHero('${key}')">⬆️ Mejorar</button>` : ''}
+            </div>
+        `;
+    }
+    body.innerHTML = html;
+}
+
+function summonHero(key) {
+    const hero = HEROES[key];
+    if (hero.costType === 'darkElixir' && GameState.darkElixir < hero.cost) { showToast('❌ Elixir oscuro insuficiente'); return; }
+    if (hero.costType === 'elixir' && GameState.elixir < hero.cost) { showToast('❌ Elixir insuficiente'); return; }
+
+    if (hero.costType === 'darkElixir') GameState.darkElixir -= hero.cost;
+    else GameState.elixir -= hero.cost;
+
+    GameState.heroes[key] = { level: 1 };
+    renderHeroesPanel();
+    updateHUD();
+    showToast(`👑 ${hero.name} invocado!`);
+    addXP(100);
+}
+
+function upgradeHero(key) {
+    const hero = HEROES[key];
+    const current = GameState.heroes[key];
+    if (!current) return;
+    const cost = Math.floor(hero.cost * 0.5 * current.level);
+    if (hero.costType === 'darkElixir' && GameState.darkElixir < cost) { showToast('❌ Elixir oscuro insuficiente'); return; }
+    if (hero.costType === 'elixir' && GameState.elixir < cost) { showToast('❌ Elixir insuficiente'); return; }
+
+    if (hero.costType === 'darkElixir') GameState.darkElixir -= cost;
+    else GameState.elixir -= cost;
+
+    current.level++;
+    renderHeroesPanel();
+    updateHUD();
+    showToast(`⬆️ ${hero.name} nivel ${current.level}!`);
+    addXP(50 * current.level);
+}
+
+function deployHero(key, worldX, worldZ) {
+    const hero = HEROES[key];
+    const owned = GameState.heroes[key];
+    if (!owned) return;
+
+    const level = owned.level;
+    GameState.heroDeployed[key] = true;
+
+    const group = new THREE.Group();
+
+    // Larger body
+    const body = new THREE.Mesh(
+        new THREE.CapsuleGeometry(0.5, 1, 4, 8),
+        new THREE.MeshStandardMaterial({ color: hero.color, metalness: 0.3 })
+    );
+    body.position.y = 0.9;
+    body.castShadow = true;
+    group.add(body);
+
+    // Cape
+    const cape = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.8, 1.2),
+        new THREE.MeshStandardMaterial({ color: hero.color, side: THREE.DoubleSide, transparent: true, opacity: 0.8 })
+    );
+    cape.position.set(0, 1, -0.4);
+    cape.rotation.x = 0.2;
+    group.add(cape);
+
+    // Crown
+    const crown = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.2, 0.35, 0.3, 5),
+        new THREE.MeshStandardMaterial({ color: 0xFFD700, metalness: 0.9 })
+    );
+    crown.position.y = 2;
+    group.add(crown);
+
+    // Head
+    const head = new THREE.Mesh(
+        new THREE.SphereGeometry(0.35, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xFFCC80 })
+    );
+    head.position.y = 1.7;
+    group.add(head);
+
+    // Aura glow
+    const aura = new THREE.PointLight(hero.color, 1.5, 8);
+    aura.position.y = 1;
+    group.add(aura);
+
+    // Aura ring
+    const auraRing = new THREE.Mesh(
+        new THREE.RingGeometry(0.8, 1.2, 16),
+        new THREE.MeshBasicMaterial({ color: hero.color, transparent: true, opacity: 0.3, side: THREE.DoubleSide })
+    );
+    auraRing.rotation.x = -Math.PI / 2;
+    auraRing.position.y = 0.05;
+    group.add(auraRing);
+
+    group.position.set(worldX, hero.type === 'air' ? 4 : 0, worldZ);
+    scene.add(group);
+
+    troopMeshes.push({
+        mesh: group, key: 'hero_' + key,
+        hp: Math.floor(hero.hp * (1 + level * 0.1)),
+        maxHp: Math.floor(hero.hp * (1 + level * 0.1)),
+        dps: Math.floor(hero.dps * (1 + level * 0.1)),
+        speed: hero.speed,
+        range: hero.range || 2,
+        type: hero.type,
+        target: null, attackTimer: 0,
+        isHero: true, heroKey: key,
+        abilityUsed: false,
+        abilityTimer: 0
+    });
+
+    spawnParticles(worldX, 2, worldZ, hero.color, 30);
+    showToast(`👑 ${hero.name} desplegado!`);
+}
+
+function useHeroAbility(troopData) {
+    if (troopData.abilityUsed) return;
+    troopData.abilityUsed = true;
+    const key = troopData.heroKey;
+    const hero = HEROES[key];
+
+    switch(key) {
+        case 'barbarianKing':
+            // Summon barbarians + heal
+            troopData.hp = Math.min(troopData.maxHp, troopData.hp + troopData.maxHp * 0.3);
+            for (let i = 0; i < 10; i++) {
+                const angle = (i / 10) * Math.PI * 2;
+                const bx = troopData.mesh.position.x + Math.cos(angle) * 3;
+                const bz = troopData.mesh.position.z + Math.sin(angle) * 3;
+                deployTroop(bx, bz);
+            }
+            spawnParticles(troopData.mesh.position.x, 2, troopData.mesh.position.z, 0xFFD700, 40);
+            showToast('⚔️ Furia de Hierro!');
+            break;
+
+        case 'archerQueen':
+            // Invisibility + speed boost
+            troopData.speed *= 2;
+            troopData._invisible = true;
+            troopData.mesh.traverse(c => { if (c.material) { c.material.transparent = true; c.material.opacity = 0.3; } });
+            setTimeout(() => {
+                troopData.speed /= 2;
+                troopData._invisible = false;
+                troopData.mesh.traverse(c => { if (c.material) c.material.opacity = 1; });
+            }, 5000);
+            showToast('👻 Capa Real activada!');
+            break;
+
+        case 'grandWarden':
+            // All troops invulnerable
+            troopMeshes.forEach(t => {
+                t._invulnerable = true;
+                setTimeout(() => { t._invulnerable = false; }, 4000);
+            });
+            spawnParticles(troopData.mesh.position.x, 3, troopData.mesh.position.z, 0x4FC3F7, 50);
+            showToast('✨ Tomo Eterno activado!');
+            break;
+
+        case 'royalChampion':
+            // Bouncing shield
+            let targets = enemyBuildings.filter(eb => eb.hp > 0).slice(0, 4);
+            targets.forEach((t, i) => {
+                setTimeout(() => {
+                    t.hp -= troopData.dps * 3;
+                    spawnParticles(t.x, 2, t.z, 0xFF5722, 15);
+                    if (t.hp <= 0) destroyEnemyBuilding(t);
+                }, i * 400);
+            });
+            showToast('🛡️ Escudo Buscador lanzado!');
+            break;
+    }
+}
+
+// ============================================
+// CLAN SYSTEM
+// ============================================
+const CLAN_NAMES = ['Dragones de Fuego', 'Guerreros Eternos', 'Sombras del Abismo', 'Caballeros del Alba', 'Legión Oscura',
+    'Fénix Dorados', 'Titanes', 'Reyes de la Guerra', 'Halcones de Acero', 'Lobos Solitarios'];
+const MEMBER_NAMES = ['DragonSlayer', 'WarLord99', 'NightKing', 'EliteArcher', 'GoblinHunter',
+    'ShadowStrike', 'IronFist', 'ThunderBolt', 'GoldMiner', 'DarkKnight',
+    'FireWizard', 'IceQueen', 'StormBringer', 'StarDestroyer', 'MoonWalker'];
+
+GameState.clan = null;
+GameState.clanChat = [];
+
+function renderClanPanel() {
+    const body = document.getElementById('clanPanelBody');
+
+    if (!GameState.clan) {
+        body.innerHTML = `
+            <div style="text-align:center;padding:30px 0">
+                <div style="font-size:60px;margin-bottom:16px">🏰</div>
+                <h2 style="color:#ffd700;margin-bottom:8px">Únete a un Clan</h2>
+                <p style="color:#888;margin-bottom:20px">Lucha junto a otros jugadores y gana grandes recompensas</p>
+                <button class="train-btn" onclick="createClan()" style="margin-right:8px">Crear Clan</button>
+                <button class="brew-btn" onclick="joinRandomClan()">Unirse</button>
+            </div>
+        `;
+        return;
+    }
+
+    const clan = GameState.clan;
+    let membersHTML = '';
+    clan.members.forEach((m, i) => {
+        membersHTML += `
+            <div class="clan-member">
+                <div class="clan-member-rank">${i === 0 ? '👑' : i < 3 ? '⭐' : `${i + 1}`}</div>
+                <div class="clan-member-name">${m.name}${m.isPlayer ? ' (Tú)' : ''}</div>
+                <div class="clan-member-trophies">🏆 ${m.trophies}</div>
+            </div>
+        `;
+    });
+
+    let chatHTML = '';
+    GameState.clanChat.forEach(msg => {
+        chatHTML += `<div class="chat-msg"><span class="sender">${msg.sender}:</span> <span class="text">${msg.text}</span></div>`;
+    });
+
+    body.innerHTML = `
+        <div class="clan-header-info">
+            <div class="clan-badge">🏰</div>
+            <div class="clan-details">
+                <h2>${clan.name}</h2>
+                <p>Miembros: ${clan.members.length}/50 | Nivel: ${clan.level} | 🏆 ${clan.trophies}</p>
+                <p>Guerra ganadas: ${clan.warsWon} | Donaciones: ${clan.donations}</p>
+            </div>
+        </div>
+        <div class="clan-members">${membersHTML}</div>
+        <div class="clan-chat" id="clanChatBox">${chatHTML}</div>
+        <div class="chat-input-row">
+            <input class="chat-input" id="chatInput" placeholder="Escribe un mensaje..." onkeypress="if(event.key==='Enter')sendChat()">
+            <button class="chat-send" onclick="sendChat()">Enviar</button>
+        </div>
+        <div style="margin-top:12px;display:flex;gap:8px">
+            <button class="info-btn info-btn-upgrade" onclick="donateTroops()" style="flex:1">🎁 Donar Tropas</button>
+            <button class="info-btn info-btn-sell" onclick="leaveClan()" style="flex:1">🚪 Salir</button>
+        </div>
+    `;
+}
+
+function createClan() {
+    const name = CLAN_NAMES[Math.floor(Math.random() * CLAN_NAMES.length)];
+    GameState.clan = {
+        name: name,
+        level: 1,
+        trophies: GameState.trophies,
+        warsWon: 0,
+        donations: 0,
+        members: [{ name: 'Tú', trophies: GameState.trophies, isPlayer: true }]
+    };
+    // Add AI members
+    const numMembers = 5 + Math.floor(Math.random() * 10);
+    for (let i = 0; i < numMembers; i++) {
+        GameState.clan.members.push({
+            name: MEMBER_NAMES[i % MEMBER_NAMES.length],
+            trophies: Math.floor(Math.random() * 3000),
+            isPlayer: false
+        });
+    }
+    GameState.clan.members.sort((a, b) => b.trophies - a.trophies);
+    GameState.clan.trophies = GameState.clan.members.reduce((a, m) => a + m.trophies, 0);
+
+    addClanMessage('Sistema', `¡${name} ha sido creado!`);
+    addClanMessage('Sistema', 'Bienvenido al clan. ¡Lucha junto a tus compañeros!');
+    renderClanPanel();
+    showToast(`🏰 Clan "${name}" creado!`);
+    addXP(50);
+}
+
+function joinRandomClan() {
+    createClan(); // Same effect for single player
+}
+
+function addClanMessage(sender, text) {
+    GameState.clanChat.push({ sender, text, time: Date.now() });
+    if (GameState.clanChat.length > 50) GameState.clanChat.shift();
+}
+
+function sendChat() {
+    const input = document.getElementById('chatInput');
+    if (!input || !input.value.trim()) return;
+    addClanMessage('Tú', input.value.trim());
+    input.value = '';
+
+    // AI response
+    setTimeout(() => {
+        const responses = [
+            '¡Buena estrategia!', '¿Alguien dona dragones?', 'Vamos a ganar la guerra!',
+            '¡GG!', 'Necesito gigantes para atacar', 'Mi base es indestructible 💪',
+            '¿Quién ataca primero?', '¡Buena defensa!', 'Donaciones por favor 🙏',
+            '¡3 estrellas!', 'Los muros nivel 10 son geniales', '¡Vamos clan!'
+        ];
+        const sender = MEMBER_NAMES[Math.floor(Math.random() * MEMBER_NAMES.length)];
+        addClanMessage(sender, responses[Math.floor(Math.random() * responses.length)]);
+        renderClanPanel();
+    }, 1500 + Math.random() * 3000);
+
+    renderClanPanel();
+}
+
+function donateTroops() {
+    const totalTroops = Object.values(GameState.army).reduce((a, b) => a + b, 0);
+    if (totalTroops === 0) { showToast('❌ No tienes tropas para donar'); return; }
+
+    // Donate first troop type
+    const key = Object.keys(GameState.army)[0];
+    GameState.army[key]--;
+    if (GameState.army[key] <= 0) delete GameState.army[key];
+
+    GameState.clan.donations++;
+    addClanMessage('Sistema', `¡Tú donó un ${TROOPS[key]?.name || key}!`);
+    GameState.xp += 10;
+    GameState.gems += 2;
+    renderClanPanel();
+    updateHUD();
+    showToast(`🎁 Donaste un ${TROOPS[key]?.name || key} (+2 💎)`);
+}
+
+function leaveClan() {
+    GameState.clan = null;
+    GameState.clanChat = [];
+    renderClanPanel();
+    showToast('🚪 Saliste del clan');
+}
+
+// ============================================
+// ACHIEVEMENTS SYSTEM
+// ============================================
+const ACHIEVEMENTS = [
+    { id: 'build5', name: 'Constructor Novato', desc: 'Construye 5 edificios', icon: '🏗️', reward: 50, check: () => GameState.buildings.length >= 5, goal: 5, progress: () => GameState.buildings.length },
+    { id: 'build15', name: 'Arquitecto', desc: 'Construye 15 edificios', icon: '🏛️', reward: 150, check: () => GameState.buildings.length >= 15, goal: 15, progress: () => GameState.buildings.length },
+    { id: 'build30', name: 'Maestro Constructor', desc: 'Construye 30 edificios', icon: '🏰', reward: 300, check: () => GameState.buildings.length >= 30, goal: 30, progress: () => GameState.buildings.length },
+    { id: 'gold10k', name: 'Rico', desc: 'Acumula 10,000 oro', icon: '💰', reward: 30, check: () => GameState.gold >= 10000, goal: 10000, progress: () => Math.floor(GameState.gold) },
+    { id: 'gold100k', name: 'Millonario', desc: 'Acumula 100,000 oro', icon: '👑', reward: 100, check: () => GameState.gold >= 100000, goal: 100000, progress: () => Math.floor(GameState.gold) },
+    { id: 'trophies50', name: 'Competidor', desc: 'Consigue 50 trofeos', icon: '🏆', reward: 50, check: () => GameState.trophies >= 50, goal: 50, progress: () => GameState.trophies },
+    { id: 'trophies200', name: 'Campeón', desc: 'Consigue 200 trofeos', icon: '🥇', reward: 200, check: () => GameState.trophies >= 200, goal: 200, progress: () => GameState.trophies },
+    { id: 'trophies1000', name: 'Leyenda', desc: 'Consigue 1,000 trofeos', icon: '⭐', reward: 500, check: () => GameState.trophies >= 1000, goal: 1000, progress: () => GameState.trophies },
+    { id: 'level5', name: 'En Progreso', desc: 'Alcanza nivel 5', icon: '📈', reward: 50, check: () => GameState.level >= 5, goal: 5, progress: () => GameState.level },
+    { id: 'level10', name: 'Veterano', desc: 'Alcanza nivel 10', icon: '🎖️', reward: 150, check: () => GameState.level >= 10, goal: 10, progress: () => GameState.level },
+    { id: 'level20', name: 'Elite', desc: 'Alcanza nivel 20', icon: '💎', reward: 500, check: () => GameState.level >= 20, goal: 20, progress: () => GameState.level },
+    { id: 'clan', name: 'Social', desc: 'Únete a un clan', icon: '🏰', reward: 30, check: () => !!GameState.clan, goal: 1, progress: () => GameState.clan ? 1 : 0 },
+    { id: 'hero1', name: 'Invocador', desc: 'Invoca tu primer héroe', icon: '👑', reward: 100, check: () => Object.keys(GameState.heroes).length > 0, goal: 1, progress: () => Object.keys(GameState.heroes).length },
+    { id: 'spell5', name: 'Mago', desc: 'Usa 5 hechizos en batallas', icon: '✨', reward: 80, check: () => (GameState.spellsUsed || 0) >= 5, goal: 5, progress: () => GameState.spellsUsed || 0 },
+    { id: 'battles10', name: 'Guerrero', desc: 'Completa 10 batallas', icon: '⚔️', reward: 100, check: () => (GameState.battlesCompleted || 0) >= 10, goal: 10, progress: () => GameState.battlesCompleted || 0 },
+    { id: 'stars30', name: 'Estrella', desc: 'Consigue 30 estrellas totales', icon: '⭐', reward: 200, check: () => (GameState.totalStars || 0) >= 30, goal: 30, progress: () => GameState.totalStars || 0 },
+    { id: 'donate5', name: 'Generoso', desc: 'Dona 5 tropas al clan', icon: '🎁', reward: 50, check: () => (GameState.clan?.donations || 0) >= 5, goal: 5, progress: () => GameState.clan?.donations || 0 }
+];
+
+GameState.achievementsUnlocked = GameState.achievementsUnlocked || {};
+GameState.spellsUsed = GameState.spellsUsed || 0;
+GameState.battlesCompleted = GameState.battlesCompleted || 0;
+GameState.totalStars = GameState.totalStars || 0;
+
+function renderAchievements() {
+    const body = document.getElementById('achievePanelBody');
+    let html = '';
+    ACHIEVEMENTS.forEach(ach => {
+        const unlocked = GameState.achievementsUnlocked[ach.id];
+        const progress = Math.min(ach.progress(), ach.goal);
+        const percent = Math.min(100, (progress / ach.goal) * 100);
+        html += `
+            <div class="achieve-item ${unlocked ? 'unlocked' : ''}">
+                <div class="achieve-icon">${ach.icon}</div>
+                <div class="achieve-info">
+                    <h4>${ach.name}</h4>
+                    <p>${ach.desc}</p>
+                    <div class="achieve-progress"><div class="achieve-progress-fill" style="width:${percent}%"></div></div>
+                    <p style="color:#aaa;font-size:10px;margin-top:2px">${progress}/${ach.goal}</p>
+                </div>
+                ${unlocked ? '<div class="achieve-check">✅</div>' : `<div class="achieve-reward">💎 ${ach.reward}</div>`}
+            </div>
+        `;
+    });
+    body.innerHTML = html;
+}
+
+function checkAchievements() {
+    ACHIEVEMENTS.forEach(ach => {
+        if (!GameState.achievementsUnlocked[ach.id] && ach.check()) {
+            GameState.achievementsUnlocked[ach.id] = true;
+            GameState.gems += ach.reward;
+            showToast(`🏆 Logro: ${ach.name} (+${ach.reward} 💎)`);
+            updateHUD();
+        }
+    });
+}
+
+// ============================================
+// LEAGUE SYSTEM
+// ============================================
+const LEAGUES = [
+    { name: 'Sin Liga', icon: '⚪', min: 0, reward: 0 },
+    { name: 'Bronce III', icon: '🥉', min: 50, reward: 50 },
+    { name: 'Bronce II', icon: '🥉', min: 100, reward: 100 },
+    { name: 'Bronce I', icon: '🥉', min: 200, reward: 150 },
+    { name: 'Plata III', icon: '🥈', min: 400, reward: 200 },
+    { name: 'Plata II', icon: '🥈', min: 600, reward: 300 },
+    { name: 'Plata I', icon: '🥈', min: 800, reward: 400 },
+    { name: 'Oro III', icon: '🥇', min: 1000, reward: 500 },
+    { name: 'Oro II', icon: '🥇', min: 1300, reward: 700 },
+    { name: 'Oro I', icon: '🥇', min: 1600, reward: 900 },
+    { name: 'Cristal III', icon: '💎', min: 2000, reward: 1200 },
+    { name: 'Cristal II', icon: '💎', min: 2400, reward: 1500 },
+    { name: 'Cristal I', icon: '💎', min: 2800, reward: 1800 },
+    { name: 'Maestro III', icon: '🏅', min: 3200, reward: 2200 },
+    { name: 'Maestro II', icon: '🏅', min: 3600, reward: 2600 },
+    { name: 'Maestro I', icon: '🏅', min: 4000, reward: 3000 },
+    { name: 'Campeón III', icon: '🏆', min: 4400, reward: 3500 },
+    { name: 'Campeón II', icon: '🏆', min: 4800, reward: 4000 },
+    { name: 'Campeón I', icon: '🏆', min: 5200, reward: 4500 },
+    { name: 'Titán III', icon: '⚡', min: 5600, reward: 5000 },
+    { name: 'Titán II', icon: '⚡', min: 6000, reward: 6000 },
+    { name: 'Titán I', icon: '⚡', min: 6400, reward: 7000 },
+    { name: 'Leyenda', icon: '🌟', min: 7000, reward: 10000 }
+];
+
+function getCurrentLeague() {
+    let league = LEAGUES[0];
+    for (const l of LEAGUES) {
+        if (GameState.trophies >= l.min) league = l;
+    }
+    return league;
+}
+
+function updateLeagueBadge() {
+    const league = getCurrentLeague();
+    document.getElementById('leagueIcon').textContent = league.icon;
+    document.getElementById('leagueName').textContent = league.name;
+}
+
+function showLeagueInfo() {
+    const league = getCurrentLeague();
+    const nextLeague = LEAGUES[LEAGUES.indexOf(league) + 1];
+    let msg = `${league.icon} ${league.name}\n🏆 ${GameState.trophies} trofeos`;
+    if (nextLeague) msg += `\nSiguiente: ${nextLeague.name} (${nextLeague.min} 🏆)`;
+    showToast(msg);
+}
+
+// ============================================
+// AUDIO SYSTEM (Web Audio API)
+// ============================================
+let audioCtx = null;
+
+function initAudio() {
+    try { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); } catch(e) {}
+}
+
+function playSound(type) {
+    if (!audioCtx) initAudio();
+    if (!audioCtx) return;
+
+    const now = audioCtx.currentTime;
+
+    switch(type) {
+        case 'place': {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.setValueAtTime(400, now);
+            osc.frequency.exponentialRampToValueAtTime(800, now + 0.1);
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+            osc.start(now); osc.stop(now + 0.2);
+            break;
+        }
+        case 'upgrade': {
+            [400, 500, 600, 800].forEach((f, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.frequency.setValueAtTime(f, now + i * 0.08);
+                osc.type = 'triangle';
+                gain.gain.setValueAtTime(0.1, now + i * 0.08);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.15);
+                osc.start(now + i * 0.08); osc.stop(now + i * 0.08 + 0.15);
+            });
+            break;
+        }
+        case 'attack': {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(200, now);
+            osc.frequency.exponentialRampToValueAtTime(80, now + 0.3);
+            gain.gain.setValueAtTime(0.12, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            osc.start(now); osc.stop(now + 0.3);
+            break;
+        }
+        case 'explosion': {
+            const bufferSize = audioCtx.sampleRate * 0.3;
+            const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < bufferSize; i++) {
+                data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+            }
+            const noise = audioCtx.createBufferSource();
+            noise.buffer = buffer;
+            const gain = audioCtx.createGain();
+            const filter = audioCtx.createBiquadFilter();
+            filter.type = 'lowpass';
+            filter.frequency.setValueAtTime(1000, now);
+            filter.frequency.exponentialRampToValueAtTime(200, now + 0.3);
+            noise.connect(filter); filter.connect(gain); gain.connect(audioCtx.destination);
+            gain.gain.setValueAtTime(0.2, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.3);
+            noise.start(now); noise.stop(now + 0.3);
+            break;
+        }
+        case 'lightning': {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'square';
+            osc.frequency.setValueAtTime(2000, now);
+            osc.frequency.exponentialRampToValueAtTime(50, now + 0.4);
+            gain.gain.setValueAtTime(0.15, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+            osc.start(now); osc.stop(now + 0.4);
+            // Crackle
+            const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.2, audioCtx.sampleRate);
+            const d = buf.getChannelData(0);
+            for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length) * 0.3;
+            const n = audioCtx.createBufferSource(); n.buffer = buf;
+            const g2 = audioCtx.createGain(); n.connect(g2); g2.connect(audioCtx.destination);
+            g2.gain.setValueAtTime(0.15, now);
+            g2.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+            n.start(now + 0.05); n.stop(now + 0.25);
+            break;
+        }
+        case 'coin': {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(1200, now);
+            osc.frequency.setValueAtTime(1600, now + 0.05);
+            gain.gain.setValueAtTime(0.08, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+            osc.start(now); osc.stop(now + 0.15);
+            break;
+        }
+        case 'victory': {
+            [523, 659, 784, 1047].forEach((f, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(f, now + i * 0.15);
+                gain.gain.setValueAtTime(0.12, now + i * 0.15);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.15 + 0.3);
+                osc.start(now + i * 0.15); osc.stop(now + i * 0.15 + 0.3);
+            });
+            break;
+        }
+        case 'defeat': {
+            [400, 350, 300, 200].forEach((f, i) => {
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain); gain.connect(audioCtx.destination);
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(f, now + i * 0.2);
+                gain.gain.setValueAtTime(0.1, now + i * 0.2);
+                gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.2 + 0.3);
+                osc.start(now + i * 0.2); osc.stop(now + i * 0.2 + 0.3);
+            });
+            break;
+        }
+        case 'deploy': {
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(300, now);
+            osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
+            gain.gain.setValueAtTime(0.1, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.15);
+            osc.start(now); osc.stop(now + 0.15);
+            break;
+        }
+    }
+}
+
+// Background music
+let musicPlaying = false;
+function toggleMusic() {
+    if (!audioCtx) initAudio();
+    if (!audioCtx) return;
+    musicPlaying = !musicPlaying;
+    if (musicPlaying) playAmbientLoop();
+    showToast(musicPlaying ? '🎵 Música activada' : '🔇 Música desactivada');
+}
+
+let ambientInterval;
+function playAmbientLoop() {
+    if (ambientInterval) clearInterval(ambientInterval);
+    const notes = [261, 329, 392, 329, 349, 392, 440, 392];
+    let noteIndex = 0;
+    ambientInterval = setInterval(() => {
+        if (!musicPlaying) { clearInterval(ambientInterval); return; }
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain); gain.connect(audioCtx.destination);
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(notes[noteIndex % notes.length], now);
+        gain.gain.setValueAtTime(0.03, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.4);
+        osc.start(now); osc.stop(now + 0.4);
+        noteIndex++;
+    }, 500);
+}
+
+// ============================================
+// TUTORIAL SYSTEM
+// ============================================
+const TUTORIAL_STEPS = [
+    { text: '¡Bienvenido a Realm of Clans! 🏰\n\nAquí construirás tu aldea, entrenarás tropas y atacarás otras bases.', btn: 'Comenzar' },
+    { text: '🏗️ Primero, construyamos un edificio.\n\nPresiona el botón "Construir" en la barra inferior para ver los edificios disponibles.', btn: 'Entendido' },
+    { text: '💰 Las Minas de Oro y los Recolectores de Elixir producen recursos automáticamente.\n\n¡Construye varios para tener ingresos constantes!', btn: 'Siguiente' },
+    { text: '🛡️ Las Defensas protegen tu aldea.\n\nCañones, Torres de Arqueras y Morteros atacan a los enemigos que invadan tu base.', btn: 'Siguiente' },
+    { text: '⚔️ Entrena tropas en la pestaña "Ejército".\n\nNecesitas un Campamento para alojar tropas y un Cuartel para entrenarlas.', btn: 'Siguiente' },
+    { text: '💥 Cuando tengas tropas, presiona "Atacar".\n\nElige un modo de batalla, despliega tropas haciendo clic en el terreno enemigo.', btn: 'Siguiente' },
+    { text: '✨ Los Hechizos dan ventajas en batalla.\n\nRayos, Curación, Furia... ¡Úsalos estratégicamente!', btn: 'Siguiente' },
+    { text: '👑 Desbloquea Héroes poderosos.\n\nEl Rey Bárbaro, la Reina Arquera y más te esperan. ¡Sube de nivel para desbloquearlos!', btn: 'Siguiente' },
+    { text: '🏆 Gana trofeos para subir de liga.\n\nDesde Bronce hasta Leyenda, cada liga da mejores recompensas.', btn: 'Siguiente' },
+    { text: '💾 Tu progreso se guarda automáticamente.\n\nPresiona "Guardar" para guardar manualmente. ¡Los recursos se producen incluso offline!', btn: '¡A jugar!' }
+];
+
+GameState.tutorialStep = -1;
+GameState.tutorialDone = false;
+
+function startTutorial() {
+    if (GameState.tutorialDone) return;
+    GameState.tutorialStep = 0;
+    showTutorialStep();
+}
+
+function showTutorialStep() {
+    if (GameState.tutorialStep < 0 || GameState.tutorialStep >= TUTORIAL_STEPS.length) {
+        document.getElementById('tutorial').classList.remove('active');
+        GameState.tutorialDone = true;
+        GameState.gems += 50;
+        showToast('🎓 Tutorial completado! +50 💎');
+        updateHUD();
+        return;
+    }
+
+    const step = TUTORIAL_STEPS[GameState.tutorialStep];
+    document.getElementById('tutorial').classList.add('active');
+    document.getElementById('tutorialText').textContent = step.text;
+    document.getElementById('tutorialBtn').textContent = step.btn;
+    document.getElementById('tutorialStep').textContent = `${GameState.tutorialStep + 1}/${TUTORIAL_STEPS.length}`;
+}
+
+function nextTutorialStep() {
+    GameState.tutorialStep++;
+    showTutorialStep();
+}
+
+// ============================================
+// ENHANCED VISUALS
+// ============================================
+let smokeParticles = [];
+let sparkParticles = [];
+
+function createSmokeEffect(x, y, z) {
+    const geo = new THREE.SphereGeometry(0.3, 6, 6);
+    const mat = new THREE.MeshBasicMaterial({ color: 0x888888, transparent: true, opacity: 0.4 });
+    const smoke = new THREE.Mesh(geo, mat);
+    smoke.position.set(x + (Math.random() - 0.5) * 0.5, y, z + (Math.random() - 0.5) * 0.5);
+    smoke.userData = { vy: 0.5 + Math.random() * 0.5, life: 1 };
+    scene.add(smoke);
+    smokeParticles.push(smoke);
+}
+
+function updateSmokeParticles(dt) {
+    for (let i = smokeParticles.length - 1; i >= 0; i--) {
+        const s = smokeParticles[i];
+        s.position.y += s.userData.vy * dt;
+        s.userData.life -= dt * 0.8;
+        s.material.opacity = s.userData.life * 0.4;
+        s.scale.setScalar(1 + (1 - s.userData.life) * 2);
+        if (s.userData.life <= 0) {
+            scene.remove(s);
+            smokeParticles.splice(i, 1);
+        }
+    }
+}
+
+function createSparkEffect(x, y, z, color) {
+    for (let i = 0; i < 3; i++) {
+        const geo = new THREE.SphereGeometry(0.05, 4, 4);
+        const mat = new THREE.MeshBasicMaterial({ color: color || 0xffaa00 });
+        const spark = new THREE.Mesh(geo, mat);
+        spark.position.set(x, y, z);
+        spark.userData = {
+            vx: (Math.random() - 0.5) * 2,
+            vy: Math.random() * 3 + 1,
+            vz: (Math.random() - 0.5) * 2,
+            life: 0.5 + Math.random() * 0.5
+        };
+        scene.add(spark);
+        sparkParticles.push(spark);
+    }
+}
+
+function updateSparkParticles(dt) {
+    for (let i = sparkParticles.length - 1; i >= 0; i--) {
+        const s = sparkParticles[i];
+        s.userData.vy -= 9.8 * dt;
+        s.position.x += s.userData.vx * dt;
+        s.position.y += s.userData.vy * dt;
+        s.position.z += s.userData.vz * dt;
+        s.userData.life -= dt * 2;
+        if (s.userData.life <= 0 || s.position.y < 0) {
+            scene.remove(s);
+            sparkParticles.splice(i, 1);
+        }
+    }
+}
+
+// Smoke timer for buildings
+let smokeTimer = 0;
+function updateBuildingSmoke(dt) {
+    smokeTimer += dt;
+    if (smokeTimer < 0.3) return;
+    smokeTimer = 0;
+
+    buildingMeshes.forEach((mesh, i) => {
+        if (!mesh) return;
+        const b = GameState.buildings[i];
+        if (!b) return;
+
+        // Smoke from barracks
+        if (b.type === 'barracks' || b.type === 'darkBarracks') {
+            createSmokeEffect(mesh.position.x, 3, mesh.position.z);
+        }
+        // Sparks from gold mine
+        if (b.type === 'goldMine' && Math.random() < 0.3) {
+            createSparkEffect(mesh.position.x, 1, mesh.position.z, 0xFFD700);
+        }
+        // Elixir bubbles
+        if (b.type === 'elixirCollector' && Math.random() < 0.2) {
+            createSparkEffect(mesh.position.x, 2.5, mesh.position.z, 0xE040FB);
+        }
+    });
+}
+
+// ============================================
+// ENHANCED DEPLOY BAR (with spells + heroes)
+// ============================================
+const originalRenderDeployBar = renderDeployBar;
+renderDeployBar = function() {
+    const bar = document.getElementById('deployBar');
+    let html = '';
+
+    // Troops
+    for (const [key, count] of Object.entries(GameState.army)) {
+        if (count > 0) {
+            const troop = TROOPS[key];
+            html += `<div class="deploy-btn ${GameState.deployTroop === key ? 'selected' : ''}" onclick="selectDeploy('${key}');GameState.deploySpell=null">
+                <span class="emoji">${troop.icon}</span><span class="count">x${count}</span>
+            </div>`;
+        }
+    }
+
+    // Spells
+    for (const [key, count] of Object.entries(GameState.spells)) {
+        if (count > 0) {
+            const spell = SPELLS[key];
+            html += `<div class="deploy-btn ${GameState.deploySpell === key ? 'selected' : ''}" style="border-color:${GameState.deploySpell === key ? '#7c4dff' : 'rgba(255,255,255,0.2)'}" onclick="GameState.deploySpell='${key}';GameState.deployTroop=null;renderDeployBar()">
+                <span class="emoji">${spell.icon}</span><span class="count">x${count}</span>
+            </div>`;
+        }
+    }
+
+    // Heroes
+    for (const [key, hero] of Object.entries(HEROES)) {
+        if (GameState.heroes[key] && !GameState.heroDeployed[key]) {
+            html += `<div class="deploy-btn" style="border-color:gold" onclick="deployHero('${key}',0,-25)">
+                <span class="emoji">${hero.icon.split('')[0]}</span><span class="count">H</span>
+            </div>`;
+        }
+    }
+
+    // Hero abilities
+    troopMeshes.forEach(t => {
+        if (t.isHero && !t.abilityUsed) {
+            html += `<div class="deploy-btn" style="border-color:#ff0;background:rgba(255,255,0,0.2)" onclick="useHeroAbility(troopMeshes.find(x=>x.heroKey==='${t.heroKey}'))">
+                <span class="emoji">⚡</span><span class="count" style="font-size:8px">Hab.</span>
+            </div>`;
+        }
+    });
+
+    html += `<button class="end-battle-btn" onclick="endBattle()">🏳️ Rendirse</button>`;
+    bar.innerHTML = html;
+};
+
+// Override deployTroop click to also handle spells
+const originalSetupEvents = setupEvents;
+
+// Patch battle click to handle spells
+const originalDeployHandler = deployTroop;
+
+// ============================================
+// PATCH: Battle click handles spells too
+// ============================================
+const patchBattleClick = () => {
+    const canvas = renderer.domElement;
+    canvas.addEventListener('click', (e) => {
+        if (!GameState.battleActive) return;
+        if (GameState.deploySpell) {
+            mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(e.clientY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+            const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+            const pt = new THREE.Vector3();
+            raycaster.ray.intersectPlane(plane, pt);
+            if (pt) {
+                castSpell(pt.x, pt.z);
+                GameState.spellsUsed = (GameState.spellsUsed || 0) + 1;
+            }
+        }
+    });
+};
+
+// ============================================
+// SAVE/LOAD ENHANCEMENT
+// ============================================
+const originalSaveGame = saveGame;
+saveGame = function() {
+    const saveData = {
+        gold: GameState.gold, elixir: GameState.elixir, darkElixir: GameState.darkElixir,
+        gems: GameState.gems, trophies: GameState.trophies, level: GameState.level,
+        xp: GameState.xp, xpNeeded: GameState.xpNeeded, townHallLevel: GameState.townHallLevel,
+        builders: GameState.builders, army: GameState.army, spells: GameState.spells,
+        heroes: GameState.heroes, clan: GameState.clan, clanChat: GameState.clanChat,
+        achievementsUnlocked: GameState.achievementsUnlocked,
+        spellsUsed: GameState.spellsUsed, battlesCompleted: GameState.battlesCompleted,
+        totalStars: GameState.totalStars, tutorialDone: GameState.tutorialDone,
+        buildings: GameState.buildings.map(b => ({
+            type: b.type, gx: b.gx, gz: b.gz, level: b.level, hp: b.hp, maxHp: b.maxHp
+        })),
+        savedAt: Date.now()
+    };
+    localStorage.setItem('realmOfClans', JSON.stringify(saveData));
+    playSound('coin');
+    showToast('💾 Partida guardada!');
+};
+
+// Enhance load
+const originalLoadGame = loadGame;
+loadGame = function() {
+    const data = localStorage.getItem('realmOfClans');
+    if (!data) {
+        // First time - start tutorial
+        setTimeout(() => startTutorial(), 2000);
+        return;
+    }
+
+    try {
+        const save = JSON.parse(data);
+        GameState.gold = save.gold || 5000;
+        GameState.elixir = save.elixir || 5000;
+        GameState.darkElixir = save.darkElixir || 0;
+        GameState.gems = save.gems || 250;
+        GameState.trophies = save.trophies || 0;
+        GameState.level = save.level || 1;
+        GameState.xp = save.xp || 0;
+        GameState.xpNeeded = save.xpNeeded || 100;
+        GameState.townHallLevel = save.townHallLevel || 1;
+        GameState.builders = save.builders || 2;
+        GameState.army = save.army || {};
+        GameState.spells = save.spells || {};
+        GameState.heroes = save.heroes || {};
+        GameState.clan = save.clan || null;
+        GameState.clanChat = save.clanChat || [];
+        GameState.achievementsUnlocked = save.achievementsUnlocked || {};
+        GameState.spellsUsed = save.spellsUsed || 0;
+        GameState.battlesCompleted = save.battlesCompleted || 0;
+        GameState.totalStars = save.totalStars || 0;
+        GameState.tutorialDone = save.tutorialDone || false;
+
+        if (save.buildings && save.buildings.length > 0) {
+            buildingMeshes.forEach(m => scene.remove(m));
+            buildingMeshes = [];
+            GameState.buildings = [];
+
+            save.buildings.forEach(b => {
+                GameState.buildings.push({
+                    type: b.type, gx: b.gx, gz: b.gz,
+                    level: b.level, hp: b.hp, maxHp: b.maxHp
+                });
+                const mesh = b.type === 'townhall' ? createTownHallModel(b.level) : createBuildingMesh(b.type, b.level);
+                const def = b.type === 'townhall' ? { size: 3 } : BUILDINGS[b.type];
+                const worldPos = gridToWorld(b.gx, b.gz);
+                const offset = ((def?.size || 2) * cellSize) / 2;
+                mesh.position.set(worldPos.x + offset, 0, worldPos.z + offset);
+                mesh.userData = { buildingIndex: GameState.buildings.length - 1 };
+                scene.add(mesh);
+                buildingMeshes.push(mesh);
+            });
+        }
+
+        if (save.savedAt) {
+            const elapsed = (Date.now() - save.savedAt) / 1000;
+            GameState.buildings.forEach(b => {
+                const def = BUILDINGS[b.type];
+                if (!def || !def.production) return;
+                const rate = def.production * (1 + (b.level - 1) * 0.2) / 3600;
+                const produced = rate * elapsed;
+                if (def.prodType === 'gold') GameState.gold += produced;
+                else if (def.prodType === 'elixir') GameState.elixir += produced;
+                else if (def.prodType === 'darkElixir') GameState.darkElixir += produced;
+            });
+            if (elapsed > 60) {
+                showToast(`⏰ Recursos offline recolectados (${Math.floor(elapsed / 60)} min)`);
+            }
+        }
+
+        recalcArmyCap();
+        updateHUD();
+        updateLeagueBadge();
+
+        if (!GameState.tutorialDone) {
+            setTimeout(() => startTutorial(), 2000);
+        }
+    } catch(e) {
+        console.error('Error loading save:', e);
+    }
+};
+
+// ============================================
+// PATCH: endBattle to track stats
+// ============================================
+const originalEndBattle = endBattle;
+endBattle = function() {
+    GameState.battleActive = false;
+
+    troopMeshes.forEach(t => scene.remove(t.mesh));
+    troopMeshes = [];
+    enemyBuildings.forEach(eb => { if (eb.mesh) scene.remove(eb.mesh); });
+    enemyBuildings = [];
+    GameState.heroDeployed = {};
+    GameState.activeSpellEffects = [];
+
+    GameState.gold += GameState.battleLootGold;
+    GameState.elixir += GameState.battleLootElixir;
+    GameState.trophies += GameState.battleStars * 10;
+    GameState.battlesCompleted = (GameState.battlesCompleted || 0) + 1;
+    GameState.totalStars = (GameState.totalStars || 0) + GameState.battleStars;
+
+    // Sounds
+    if (GameState.battleStars > 0) playSound('victory');
+    else playSound('defeat');
+
+    const result = document.getElementById('battleResult');
+    document.getElementById('resultStars').textContent = '⭐'.repeat(GameState.battleStars) + '☆'.repeat(3 - GameState.battleStars);
+    document.getElementById('resultTitle').innerHTML = `<span class="${GameState.battleStars > 0 ? 'result-victory' : 'result-defeat'}">${GameState.battleStars > 0 ? '¡VICTORIA!' : 'DERROTA'}</span>`;
+    document.getElementById('resultLoot').innerHTML = `
+        <div class="result-loot-item"><div class="amount gold-text">${GameState.battleLootGold}</div><div class="label">Oro</div></div>
+        <div class="result-loot-item"><div class="amount elixir-text">${GameState.battleLootElixir}</div><div class="label">Elixir</div></div>
+        <div class="result-loot-item"><div class="amount trophy-text">+${GameState.battleStars * 10}</div><div class="label">Trofeos</div></div>
+    `;
+    result.classList.add('active');
+
+    document.getElementById('battleUI').classList.remove('active');
+    document.getElementById('bottomBar').style.display = 'flex';
+
+    addXP(50 * GameState.battleStars);
+    updateHUD();
+    updateLeagueBadge();
+    checkAchievements();
+
+    cameraDist = 50;
+    cameraHeight = 40;
+};
+
+// Patch openPanel
+const originalOpenPanel = openPanel;
+openPanel = function(name) {
+    closeAllPanels();
+    document.getElementById('overlay').classList.add('active');
+    const panel = document.getElementById(name + 'Panel');
+    if (panel) {
+        panel.classList.add('active');
+        if (name === 'build') selectBuildCat('defense');
+        if (name === 'army') renderTroopGrid();
+        if (name === 'spells') renderSpellGrid();
+        if (name === 'heroes') renderHeroesPanel();
+        if (name === 'clan') renderClanPanel();
+        if (name === 'achieve') renderAchievements();
+    }
+};
+
+// Patch confirmPlacement to play sound
+const origConfirm = confirmPlacement;
+const origConfirmPlacement = confirmPlacement;
+confirmPlacement = function() {
+    const type = GameState.placingBuilding;
+    const def = BUILDINGS[type];
+    if (!type || !GameState.placementGhost) return;
+
+    const pos = GameState.placementGhost.position;
+    const grid = worldToGrid(pos.x, pos.z);
+
+    const maxCoord = gridSize / 2 - def.size;
+    if (Math.abs(grid.gx) > maxCoord || Math.abs(grid.gz) > maxCoord) {
+        showToast('❌ Fuera de los límites'); return;
+    }
+    if (isCellOccupied(grid.gx, grid.gz, def.size, -1)) {
+        showToast('❌ Espacio ocupado'); return;
+    }
+
+    if (def.costType === 'gold') GameState.gold -= def.cost;
+    else if (def.costType === 'elixir') GameState.elixir -= def.cost;
+    else GameState.darkElixir -= def.cost;
+
+    scene.remove(GameState.placementGhost);
+
+    const building = {
+        type: type, gx: grid.gx, gz: grid.gz,
+        level: 1, hp: def.hp, maxHp: def.hp
+    };
+    GameState.buildings.push(building);
+
+    const mesh = createBuildingMesh(type, 1);
+    const worldPos = gridToWorld(grid.gx, grid.gz);
+    const offset = (def.size * cellSize) / 2;
+    mesh.position.set(worldPos.x + offset, 0, worldPos.z + offset);
+    mesh.userData = { buildingIndex: GameState.buildings.length - 1 };
+    mesh.castShadow = true;
+    scene.add(mesh);
+    buildingMeshes.push(mesh);
+
+    recalcArmyCap();
+    addXP(10);
+    playSound('place');
+    spawnParticles(mesh.position.x, 2, mesh.position.z, 0x4caf50, 15);
+    showToast(`✅ ${def.name} construido!`);
+    checkAchievements();
+
+    GameState.placingBuilding = null;
+    GameState.placementGhost = null;
+    document.getElementById('placementInfo').classList.remove('active');
+    updateHUD();
+};
+
+// Achievement check timer
+let achieveCheckTimer = 0;
+
+// --- MAIN LOOP ---
+function animate() {
+    requestAnimationFrame(animate);
+
+    const dt = Math.min(clock.getDelta(), 0.1);
+    const time = clock.getElapsedTime();
+    GameState.totalTime = time;
+
+    // Camera
+    updateCamera();
+
+    // Clouds
+    clouds.forEach(c => {
+        c.position.x += c.userData.speed;
+        if (c.position.x > 120) c.position.x = -120;
+    });
+
+    // Water animation
+    waterTiles.forEach(w => {
+        w.position.y = -6 + Math.sin(time * 0.5) * 0.2;
+    });
+
+    // Day/Night
+    updateDayNight(dt);
+
+    // Production
+    updateProduction(dt);
+
+    // Upgrades
+    updateUpgrades(dt);
+
+    // Battle
+    updateBattle(dt);
+
+    // Projectiles
+    updateProjectiles(dt);
+
+    // Particles
+    updateParticles(dt);
+
+    // Building animations
+    animateBuildings(time);
+
+    // Spell effects
+    updateSpellEffects(dt);
+
+    // Smoke & sparks
+    updateSmokeParticles(dt);
+    updateSparkParticles(dt);
+    updateBuildingSmoke(dt);
+
+    // Frozen defense visual
+    enemyBuildings.forEach(eb => {
+        if (eb.frozen && eb.frozen > 0) {
+            eb.frozen -= dt;
+            if (eb.mesh && !eb._frozenVisual) {
+                eb.mesh.traverse(c => {
+                    if (c.material && !c.material._origColor) {
+                        c.material._origColor = c.material.color.getHex();
+                        c.material.color.setHex(0x88ddff);
+                    }
+                });
+                eb._frozenVisual = true;
+            }
+        } else if (eb._frozenVisual) {
+            eb.mesh?.traverse(c => {
+                if (c.material && c.material._origColor) {
+                    c.material.color.setHex(c.material._origColor);
+                    delete c.material._origColor;
+                }
+            });
+            eb._frozenVisual = false;
+        }
+    });
+
+    // Auto hero ability when low HP
+    troopMeshes.forEach(t => {
+        if (t.isHero && !t.abilityUsed && t.hp < t.maxHp * 0.3) {
+            useHeroAbility(t);
+        }
+    });
+
+    // Achievement check
+    achieveCheckTimer += dt;
+    if (achieveCheckTimer >= 5) {
+        achieveCheckTimer = 0;
+        checkAchievements();
+    }
+
+    // League update
+    updateLeagueBadge();
+
+    renderer.render(scene, camera);
+}
+
+// --- LOADING ---
+const tips = [
+    'Construyendo tu aldea...',
+    'Entrenando bárbaros...',
+    'Llenando almacenes de oro...',
+    'Preparando defensas...',
+    'Invocando dragones...',
+    'Cargando terreno 3D...',
+    'Generando mundo...'
+];
+
+let loadProgress = 0;
+const loadInterval = setInterval(() => {
+    loadProgress += Math.random() * 15 + 5;
+    if (loadProgress > 100) loadProgress = 100;
+    document.getElementById('loadBar').style.width = loadProgress + '%';
+    document.getElementById('loadTip').textContent = tips[Math.floor(Math.random() * tips.length)];
+
+    if (loadProgress >= 100) {
+        clearInterval(loadInterval);
+        setTimeout(() => {
+            document.getElementById('loadingScreen').classList.add('hidden');
+            setTimeout(() => document.getElementById('loadingScreen').remove(), 1000);
+        }, 500);
+    }
+}, 200);
+
+// Init
+init();
+initAudio();
+updateHUD();
+updateLeagueBadge();
+patchBattleClick();
+
+// Auto-save every 60 seconds
+setInterval(() => {
+    if (!GameState.battleActive) {
+        const saveData = {
+            gold: GameState.gold, elixir: GameState.elixir, darkElixir: GameState.darkElixir,
+            gems: GameState.gems, trophies: GameState.trophies, level: GameState.level,
+            xp: GameState.xp, xpNeeded: GameState.xpNeeded, townHallLevel: GameState.townHallLevel,
+            builders: GameState.builders, army: GameState.army, spells: GameState.spells,
+            heroes: GameState.heroes, clan: GameState.clan, clanChat: GameState.clanChat,
+            achievementsUnlocked: GameState.achievementsUnlocked,
+            spellsUsed: GameState.spellsUsed, battlesCompleted: GameState.battlesCompleted,
+            totalStars: GameState.totalStars, tutorialDone: GameState.tutorialDone,
+            buildings: GameState.buildings.map(b => ({
+                type: b.type, gx: b.gx, gz: b.gz, level: b.level, hp: b.hp, maxHp: b.maxHp
+            })),
+            savedAt: Date.now()
+        };
+        localStorage.setItem('realmOfClans', JSON.stringify(saveData));
+    }
+}, 60000);
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+    if (GameState.battleActive) return;
+    switch(e.key) {
+        case 'b': case 'B': openPanel('build'); break;
+        case 'a': case 'A': openPanel('army'); break;
+        case 's': case 'S': openPanel('spells'); break;
+        case 'h': case 'H': openPanel('heroes'); break;
+        case 'c': case 'C': openPanel('clan'); break;
+        case 'm': case 'M': toggleMusic(); break;
+        case 'Escape': closeAllPanels(); cancelPlacement(); break;
+    }
+});
+</script>
+</body>
+</html>
